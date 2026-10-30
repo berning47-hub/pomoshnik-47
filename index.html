@@ -182,6 +182,8 @@ input,select,textarea{font:inherit;color:inherit}
 .mbar.big{height:18px}
 .mdot{width:10px;height:10px;border-radius:50%;flex:none}
 /* настройки, валюта, деньги v2 */
+.syncpill{font-size:12px;padding:3px 9px;border-radius:999px;background:var(--bg2);color:var(--muted)}
+.syncpill.ok{color:var(--ok)}.syncpill.error,.syncpill.auth{color:var(--bad)}.syncpill.sync{color:var(--warn)}
 .presets{margin-bottom:10px}.presets small{color:var(--muted)}
 .prow{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
 .pre{display:flex;flex-direction:column;align-items:center;gap:4px;padding:6px;border-radius:12px;border:2px solid transparent;width:84px}
@@ -337,7 +339,8 @@ function seed(){
 let S;
 try{ S = JSON.parse(localStorage.getItem(KEY)) || seed(); }catch(e){ S = seed(); }
 ['7','4'].forEach(w=>{ if(!S.people[w].name && NAMES[w]) S.people[w].name = NAMES[w]; });
-const save = () => { try{ localStorage.setItem(KEY, JSON.stringify(S)); }catch(e){} };
+const saveLocal = () => { try{ localStorage.setItem(KEY, JSON.stringify(S)); }catch(e){} };
+const save = () => { saveLocal(); if(typeof syncSoon==='function') syncSoon(); };
 let UI = { section:'tasks', filter:'all', mcol:'today', modal:null };
 
 const other = w => w==='7' ? '4' : '7';
@@ -409,7 +412,7 @@ const fmtMin = m => !m ? '' : m<60 ? `${m} мин` : `${Math.floor(m/60)} ч${m%
 const $root = document.getElementById('root');
 function render(){
   applyLook();
-  if(!S.setupDone || !S.me){ $root.innerHTML = setupView(); bindSetup(); return; }
+  if(!S.setupDone || !S.me || (typeof SYNC!=='undefined' && SYNC.on && !syncHasSession())){ $root.innerHTML = setupView(); bindSetup(); return; }
   const unread = S.notes.filter(n=>!n.read && (n.scope===S.me || n.scope==='shared')).length;
   const sec = SECTIONS.find(s=>s[0]===UI.section);
   $root.innerHTML = `
@@ -424,6 +427,7 @@ function render(){
       <div class="top">
         <div><h1>${UI.section==='tasks' ? greet() : sec[2]}</h1><div class="date">${dateStr()}</div></div>
         <div class="sp"></div>
+        <span id="syncpill" class="syncpill" style="display:none"></span>
         <button class="iconbtn mgear" data-act="settings" title="Настройки">⚙︎</button>
         <button class="iconbtn" data-act="notes" title="Уведомления">🔔${unread?'<span class="dot"></span>':''}</button>
         <button class="iconbtn" data-act="profile" title="Профиль" style="padding:0;overflow:hidden">${avatarSVG(S.people[S.me].avatar,S.me,40,false)}</button>
@@ -436,6 +440,7 @@ function render(){
   ${UI.section==='tasks'?'<button class="fab" data-act="add" aria-label="Добавить задачу">+</button>':''}
   ${UI.modal ? modalView() : ''}`;
   bind();
+  if(typeof paintSync==='function') paintSync();
 }
 const esc = s => String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 function greet(){ const h=new Date().getHours(); return (h<5?'Доброй ночи':h<12?'Доброе утро':h<18?'Добрый день':'Добрый вечер')+', '+esc(pname(S.me)); }
@@ -580,6 +585,15 @@ function setupView(){
       <p style="color:var(--muted)">${first?'Задачи, прогулки, продукты и бюджет для двоих. Выберите, кто вы. Персонажа можно настроить сразу после входа.':'Выберите, кто вы.'}</p>
       <div class="who-pick">${btn('7')}${btn('4')}</div></div></div>`;
   }
+  if(SET.step===3){
+    const w = SET.who, nm = first ? (SET.name[w]||('«'+w+'»')) : pname(w);
+    return `<div class="scrim" style="background:var(--bg)"><div class="sheet" style="max-width:380px">
+      <div style="display:flex;justify-content:center;margin:0 0 10px">${avatarSVG(first?SET.av[w]:S.people[w].avatar,w,84)}</div>
+      <h2 style="text-align:center">Вход: ${esc(nm)}</h2>
+      <div class="field"><label>Пароль</label><input class="inp" id="s-pw" type="password" autocomplete="current-password" autofocus></div>
+      <p class="fhint" id="s-err" style="color:var(--bad);min-height:18px;margin:0"></p>
+      <div class="actions"><button class="btn ghost" id="s-back">Назад</button><button class="btn ${w==='4'?'blue':''}" id="s-go">Войти</button></div></div></div>`;
+  }
   const w = SET.who, a = SET.av[w];
   return `<div class="scrim" style="background:var(--bg)"><div class="sheet">
     <h2>Ваш персонаж: ${w}</h2>
@@ -593,9 +607,30 @@ function bindSetup(){
   const q = s => $root.querySelector(s);
   $root.querySelectorAll('[data-login]').forEach(b=>b.onclick=()=>{
     const w = b.dataset.login;
+    if(typeof SYNC!=='undefined' && SYNC.on){ SET.who=w; SET.step=3; render(); setTimeout(()=>q('#s-pw')?.focus(),30); return; }
     if(S.setupDone){ S.me=w; save(); render(); toast(`Вы вошли: ${pname(w)}`); }
     else { SET.who=w; SET.step=1; render(); }
   });
+  if(SET.step===3){
+    const w = SET.who, err = t => { q('#s-err').textContent = t; };
+    q('#s-back').onclick=()=>{ SET.step=0; render(); };
+    const go = async () => {
+      const pw = q('#s-pw').value; if(!pw){ q('#s-pw').focus(); return; }
+      q('#s-go').disabled = true; err('');
+      try{
+        await syncSignIn(w, pw);
+        if(S.setupDone){ S.me=w; saveLocal(); SET.step=0; render(); toast(`Вы вошли: ${pname(w)}`); syncCycle(); return; }
+        await syncCycle();                           // новое устройство: сначала забираем данные из базы
+        if(S.setupDone){ S.me=w; SET.step=0; saveLocal(); render(); toast(`Вы вошли: ${pname(w)}`); }
+        else { SET.who=w; SET.step=1; render(); }   // база пуста: создаём персонажа
+      }catch(e){
+        q('#s-go').disabled = false;
+        err(e.status===400||e.status===401 ? 'Неверный пароль или аккаунт ещё не создан' : 'Нет связи с сервером, попробуйте ещё раз');
+      }
+    };
+    q('#s-go').onclick=go; q('#s-pw').onkeydown=e=>{ if(e.key==='Enter') go(); };
+    return;
+  }
   if(SET.step!==1) return;
   const w = SET.who;
   q('#s-name')?.addEventListener('input', e=>SET.name[w]=e.target.value);
@@ -697,7 +732,7 @@ function bind(){
     all('[data-edit]', b=>b.onclick=()=>{ const w=b.dataset.edit; Object.assign(m,{who:w,av:{...S.people[w].avatar},name:S.people[w].name}); render(); });
     all('[data-me]', b=>b.onclick=()=>{ S.me=b.dataset.me; save(); Object.assign(m,{who:S.me,av:{...S.people[S.me].avatar},name:S.people[S.me].name}); render(); });
     q('#p-save').onclick=()=>{ S.people[m.who]={name:m.name.trim(),avatar:{...m.av}}; UI.modal=null; save(); render(); toast('Сохранено'); };
-    q('#p-logout').onclick=()=>{ S.me=null; UI.modal=null; save(); render(); };
+    q('#p-logout').onclick=()=>{ if(typeof syncSignOut==='function') syncSignOut(); S.me=null; UI.modal=null; saveLocal(); render(); };
   }
 }
 document.addEventListener('keydown', e=>{ if(e.key==='Escape' && UI.modal){ UI.modal=null; render(); } });
@@ -705,6 +740,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape' && UI.modal){ UI.m
 <script src="settings.js"></script>
 <script src="food.js"></script>
 <script src="money.js"></script>
+<script src="sync.js"></script>
 <script>
 render();
 if('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('sw.js').catch(()=>{});
