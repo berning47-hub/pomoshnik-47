@@ -1,6 +1,6 @@
 /* ===== Помощник 47 — раздел «Места» =====
    Самостоятельный модуль: подключается после sync.js и сам встраивается в меню, render/bind, модалки и настройки.
-   Карта: Leaflet + плитки OpenStreetMap (бесплатно, без ключа), поиск адреса: Nominatim. */
+   Карта: Leaflet + плитки Esri World Street Map (бесплатно, без ключа; OSM блокирует запуск с file://, CARTO просит ключ), поиск адреса: Nominatim. */
 const PL_CATS = [['coffee','Кофе','☕'],['food','Еда','🍽️'],['park','Парк','🌳'],['view','Вид','🏞️'],['culture','Культура','🏛️'],['other','Другое','📍']];
 const PL_CAT = Object.fromEntries(PL_CATS.map(c=>[c[0],c]));
 const PL_STAY = {coffee:30, food:60, park:40, view:30, culture:60, other:20};   // минут на месте по умолчанию
@@ -97,9 +97,9 @@ function plMountMap(){
     slot.replaceWith(PL.el);
     const dark = typeof effTheme==='function' && effTheme()==='dark';
     PL.map = L.map(PL.el, {zoomControl:true, attributionControl:true}).setView(S.placecfg.home ? [S.placecfg.home.lat, S.placecfg.home.lng] : PL_CENTER, 15);
-    PL.tiles = L.tileLayer('https://{s}.basemaps.cartocdn.com/'+(dark?'dark_all':'rastertiles/voyager')+'/{z}/{x}/{y}{r}.png', {maxZoom:19, subdomains:'abcd',
-      attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>, &copy; <a href="https://carto.com/attributions">CARTO</a>'}).addTo(PL.map);
-    PL.dark = dark;
+    PL.tiles = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {maxZoom:19,
+      attribution:'Tiles &copy; Esri, HERE, Garmin, OpenStreetMap contributors'}).addTo(PL.map);
+    PL.dark = dark; PL.el.classList.toggle('dark', dark);
     PL.layer = L.layerGroup().addTo(PL.map);
     PL.map.on('click', e=>plMapClick(e.latlng));
     PL.el.addEventListener('click', e=>{ const b=e.target.closest('[data-plpop]'); if(!b) return; const [act,id]=b.dataset.plpop.split(':'); plPopAct(act, id); });
@@ -107,7 +107,7 @@ function plMountMap(){
   } else {
     slot.replaceWith(PL.el);
     const dark = typeof effTheme==='function' && effTheme()==='dark';
-    if(dark!==PL.dark){ PL.dark=dark; PL.tiles.setUrl('https://{s}.basemaps.cartocdn.com/'+(dark?'dark_all':'rastertiles/voyager')+'/{z}/{x}/{y}{r}.png'); }
+    PL.dark = dark; PL.el.classList.toggle('dark', dark);
     setTimeout(()=>PL.map.invalidateSize(), 0);
   }
   PL.el.classList.toggle('picking', !!PL.pick);
@@ -416,6 +416,7 @@ document.head.insertAdjacentHTML('beforeend', `<style>
 .pl-wrap{display:grid;grid-template-columns:minmax(0,1fr) 380px;gap:16px;align-items:start}
 .pl-mapcol{position:sticky;top:12px}
 .pl-map{height:calc(100vh - 190px);min-height:380px;border-radius:var(--r);box-shadow:var(--shadow);background:var(--bg2);overflow:hidden;z-index:0}
+.pl-map.dark .leaflet-tile-pane{filter:invert(1) hue-rotate(180deg) brightness(.9) contrast(.9)}
 .pl-map.picking{cursor:crosshair;outline:3px solid var(--c7);outline-offset:-3px}
 .pl-map.picking .leaflet-grab{cursor:crosshair}
 .pl-side{min-width:0}
