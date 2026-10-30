@@ -60,7 +60,8 @@ if(typeof ARR!=='undefined'){
 }
 
 /* ---------- логика ---------- */
-const bkMine = b => b.owner==='both' || b.owner===S.me;        // можно править саму книгу
+const bkMine = b => b.owner==='both' || b.owner===S.me;        // можно вести прогресс и статус
+const bkOwn = b => b.owner===S.me || (b.owner==='both' && (b.addedBy||'7')===S.me);  // менять и удалять может только тот, кто добавил
 const bkReaders = b => b.owner==='both' ? ['7','4'] : [b.owner];
 const bkWhoOk = b => UI.bwho==='all' || (UI.bwho==='both' ? b.owner==='both' : b.owner===UI.bwho || b.owner==='both');
 const bkYear = d => (d||'').slice(0,4);
@@ -204,7 +205,7 @@ function bkGoals(){
 /* ---------- модалки ---------- */
 function bkBookModal(m){
   const b = S.books.find(x=>x.id===m.id); if(!b) return '';
-  const ed = bkMine(b);
+  const ed = bkMine(b), own = bkOwn(b);
   const parts = b.extra ? [{cover:b.cover, ideas:b.ideas, quote:b.quote}, ...b.extra] : [{cover:b.cover, ideas:b.ideas, quote:b.quote}];
   const pi = Math.min(m.part||0, parts.length-1), P = parts[pi];
   return `<div class="scrim" data-close><div class="sheet wide bk-sheet" role="dialog">
@@ -228,17 +229,17 @@ function bkBookModal(m){
         </div>
       </div>
     </div>
-    <div class="actions">${ed?`<button class="del" id="bk-del">Удалить</button><button class="btn ghost" id="bk-edit">Изменить</button>`:''}
+    <div class="actions">${own?`<button class="del" id="bk-del">Удалить</button><button class="btn ghost" id="bk-edit">Изменить</button>`:''}
       ${ed&&b.status==='want'?`<button class="btn ghost" data-bstart="${b.id}">Начать читать</button>`:''}
       ${ed&&b.status==='reading'?`<button class="btn ghost" data-bdone="${b.id}">Прочитано</button>`:''}
       <button class="btn" id="bk-close">Готово</button></div>
   </div></div>`;
 }
 function bkEditModal(m){
-  const d = m.draft, ro = !m.isNew && !bkMine(d);
+  const d = m.draft, ro = !m.isNew && !bkOwn(d);
   const owners = [[S.me, badgeEl(S.me)+' '+esc(pname(S.me))], ['both', `<span class="marks" style="margin:0">${badgeEl('4')+badgeEl('7')}</span> Вместе`]];
   return `<div class="scrim" data-close><div class="sheet" role="dialog"><h2>${m.isNew?'Новая книга':'Книга'}</h2>
-    ${ro?`<p class="fhint" style="margin-top:-6px">Это книга: ${esc(pname(d.owner))}. Её можно только смотреть.</p>`:''}
+    ${ro?`<p class="fhint" style="margin-top:-6px">Книгу добавил${fem(d.addedBy)?'а':''} ${esc(pname(d.addedBy||'7'))}, менять её может только ${fem(d.addedBy)?'она':'он'}.</p>`:''}
     <div class="field"><label>Название</label><input class="inp" id="be-title" value="${esc(d.title)}" placeholder="Например: Цветы для Элджернона"></div>
     <div class="field"><label>Автор</label><input class="inp" id="be-author" value="${esc(d.author)}" placeholder="Дэниел Киз"></div>
     <div class="field"><label>Где книга</label><div class="pick" id="be-status">${Object.entries(BK_STATUS).map(([k,t])=>`<button data-v="${k}" class="${d.status===k?'on':''}">${t}</button>`).join('')}</div></div>
@@ -312,8 +313,8 @@ function bindBooks(){
   all('[data-bprog]', b=>b.onclick=()=>{ UI.modal={type:'bprog', id:b.dataset.bprog}; render(); setTimeout(()=>q('#bp-page')?.focus(),30); });
   all('[data-bdone]', b=>b.onclick=()=>{ const bk=find(b.dataset.bdone); bkFinish(bk); UI.modal={type:'book', id:bk.id}; save(); render(); });
   all('[data-bstart]', b=>b.onclick=()=>{ const bk=find(b.dataset.bstart); bk.status='reading'; bk.startedAt=localISO(); UI.btab='reading'; UI.modal=null; save(); render(); toast(`Начали «${bk.title}»`); });
-  all('[data-bprio]', b=>b.onclick=()=>{ const bk=find(b.dataset.bprio); if(!bkMine(bk)) return; bk.prio=bk.prio?0:1; save(); render(); });
-  all('[data-bcopy]', b=>b.onclick=()=>{ const bk=find(b.dataset.bcopy); bk.owner='both'; notify(`${pname(S.me)} тоже хочет прочитать «${bk.title}», книга теперь общая`, other(S.me)); save(); render(); toast('Теперь книга общая'); });
+  all('[data-bprio]', b=>b.onclick=()=>{ const bk=find(b.dataset.bprio); if(!bkOwn(bk)) return; bk.prio=bk.prio?0:1; save(); render(); });
+  all('[data-bcopy]', b=>b.onclick=()=>{ const bk=find(b.dataset.bcopy); const c=bkNew('want',bk.title,bk.author); c.owner=S.me; c.why=bk.why||''; S.books.push(c); notify(`${pname(S.me)} тоже хочет прочитать «${bk.title}»`, other(S.me)); save(); render(); toast('Добавлено в ваш список'); });
   all('[data-bpick]', b=>b.onclick=()=>{ const l=S.books.filter(x=>x.status==='want' && bkWhoOk(x)); if(!l.length) return;
     const pr = l.filter(x=>x.prio), pool = pr.length && Math.random()<.6 ? pr : l, cur = UI.modal?.id;
     let pick = pool[Math.floor(Math.random()*pool.length)]; if(pick.id===cur && l.length>1) pick = l.find(x=>x.id!==cur);
@@ -338,7 +339,7 @@ function bindBooks(){
   }
   if(m.type==='bedit'){
     const d = m.draft;
-    if(m.isNew || bkMine(d)){
+    if(m.isNew || bkOwn(d)){
       const read = () => { d.title=q('#be-title').value; d.author=q('#be-author').value; d.format=q('#be-format').value; d.pages=q('#be-pages').value;
         if(q('#be-fin')) d.finishedAt=q('#be-fin').value; if(q('#be-why')) d.why=q('#be-why').value;
         d.period=q('#be-period').value; d.life=q('#be-life').value; d.born=q('#be-born').value; d.quote=q('#be-quote').value;

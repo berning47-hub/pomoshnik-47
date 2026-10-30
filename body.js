@@ -17,6 +17,23 @@ function ensureBody(){
   if(!S.bodycfg) S.bodycfg = {week:{'7':3,'4':3}};
   S.bvideos.forEach(v=>{ v.diff=v.diff||{}; v.done=v.done||{}; ['7','4'].forEach(w=>{ v.done[w]=v.done[w]||[]; }); v.tags=v.tags||[]; });
   UI.bdtab = UI.bdtab || 'list'; UI.bdcat = UI.bdcat || 'all';
+  /* видео, которые Кирилл прислал первыми: добавляются один раз */
+  S.bodycfg.seeded = S.bodycfg.seeded || [];
+  [['btnAP-_GXtU','Тренировка на пресс','train',['Пресс и кор']], ['D3Ysvoz7I2E','Растяжка','yoga',['Растяжка']]].forEach(([yt,title,cat,tags])=>{
+    if(S.bodycfg.seeded.includes(yt)) return; S.bodycfg.seeded.push(yt);
+    if(!S.bvideos.some(v=>v.yt===yt)) S.bvideos.push({id:'bv-'+yt, url:'https://www.youtube.com/watch?v='+yt, yt, title, auto:true, dur:0, cat, tags, review:'', fav:false, diff:{}, done:{'7':[],'4':[]}, by:'7', at:Date.now()});
+  });
+}
+/* у видео без длительности: тихо узнаём её (и настоящее название) у YouTube, по одному */
+let bdFilling = false; const bdTried = new Set();
+async function bdFillMeta(){
+  if(bdFilling) return;
+  const v = S.bvideos.find(x=>x.yt && !x.dur && !bdTried.has(x.yt)); if(!v) return;
+  bdFilling = true; bdTried.add(v.yt);
+  const r = await bdYtMeta(v.yt);
+  bdFilling = false;
+  if(r.dur){ v.dur = r.dur; if(r.title && v.auto){ v.title = r.title; delete v.auto; } save(); if(UI.section==='body' && !UI.modal) render(); }
+  bdFillMeta();
 }
 ensureBody();
 
@@ -31,6 +48,8 @@ function bdYtId(url){
   const m = String(url).match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?(?:.*&)?v=|shorts\/|embed\/|live\/))([\w-]{11})/);
   return m ? m[1] : (/^[\w-]{11}$/.test(url.trim()) ? url.trim() : '');
 }
+const bdStart = url => { const m = String(url||'').match(/[?&#]t=(?:(\d+)h)?(?:(\d+)m)?(\d+)s?/); return m ? (+m[1]||0)*3600+(+m[2]||0)*60+(+m[3]||0) : 0; };
+const bdYtLink = v => v.url || 'https://www.youtube.com/watch?v='+v.yt;
 const bdThumb = id => `https://i.ytimg.com/vi/${id}/mqdefault.jpg`;
 let bdYtReady = null;
 function bdLoadYt(){
@@ -77,7 +96,7 @@ function bdStreak(w){
 
 /* ---------- экран ---------- */
 function bodyView(){
-  ensureBody();
+  ensureBody(); setTimeout(bdFillMeta, 300);
   const tabs = [['list','Тренировки'],['me','Тело']];
   return `<div class="filters"><div class="seg">${tabs.map(([k,t])=>`<button data-bdtab="${k}" class="${UI.bdtab===k?'on':''}">${t}</button>`).join('')}</div>
     <div class="sp" style="flex:1"></div>${UI.bdtab==='list'?'<button class="btn" data-bdnew>+ Видео</button>':''}</div>
@@ -102,11 +121,11 @@ function bdList(){
 function bdCard(v){
   const c = BD_CAT[v.cat]||BD_CATS[0];
   return `<article class="bd-card">
-    <a class="bd-thumb" ${v.yt?`href="https://www.youtube.com/watch?v=${esc(v.yt)}" target="_blank" rel="noopener"`:''}>
+    <a class="bd-thumb" ${v.yt?`data-bdplay="${v.id}" href="${esc(bdYtLink(v))}"`:''}>
       ${v.yt?`<img src="${bdThumb(v.yt)}" alt="" loading="lazy" onerror="this.remove()">`:`<div class="bd-noimg">${c[2]}</div>`}
       ${v.dur?`<span class="bd-dur">${bdDur(v.dur)}</span>`:''}${v.yt?'<span class="bd-play">▶</span>':''}</a>
     <div class="bd-body">
-      <div class="bd-title" data-bdedit="${v.id}"><b>${v.fav?'★ ':''}${esc(v.title||'Без названия')}</b><small>${c[2]} ${c[1]}${v.dur?` · ${bdMin(v.dur)} мин`:''}</small></div>
+      <div class="bd-title" data-bdedit="${v.id}"><b>${v.fav?'★ ':''}${esc(v.title||'Без названия')}</b><small>${c[2]} ${c[1]}${v.dur?` · ${bdMin(v.dur)} мин`:''}${v.yt?` · <a class="bd-ext" href="${esc(bdYtLink(v))}" target="_blank" rel="noopener">YouTube ↗</a>`:''}</small></div>
       ${v.tags.length?`<div class="bd-tags">${v.tags.map(t=>`<span class="chip">${esc(t)}</span>`).join('')}</div>`:''}
       ${v.review?`<p class="bd-rev">${esc(v.review)}</p>`:''}
       <div class="bd-foot">
@@ -119,34 +138,68 @@ function bdCard(v){
 }
 
 /* ---------- тело: ползунки и силуэт ---------- */
-const BD_P = [['h','Рост','см',140,210,170],['w','Вес','кг',40,140,70],['chest','Грудь','см',70,140,95],['waist','Талия','см',55,140,80],['hips','Бёдра','см',70,150,98]];
-function bdVal(p, k){ const d = BD_P.find(x=>x[0]===k); return +p[k] || d[5]; }
-function bdCurve(pts){                                               // плавная кривая через точки (Catmull-Rom)
+const BD_P = [['h','Рост','см',140,210],['w','Вес','кг',40,140],['chest','Грудь','см',65,145],['waist','Талия','см',50,145],['hips','Бёдра','см',70,155]];
+const BD_DEF = {'7':{h:178,w:75}, '4':{h:165,w:57}};
+/* обхваты по росту и весу, пока их не ввели вручную: так фигура меняется вместе с весом */
+function bdEst(w, h, kg){
+  const r = (kg/((h/100)**2))/22, f = w==='4';
+  return {chest:Math.round(h*(f?.53:.555)*r**.55), waist:Math.round(h*(f?.41:.45)*r**.85), hips:Math.round(h*(f?.59:.555)*r**(f?.6:.55))};
+}
+function bdVals(p, w){
+  const h = +p.h || BD_DEF[w].h, kg = +p.w || BD_DEF[w].w, e = bdEst(w, h, kg);
+  return {h, w:kg, chest:+p.chest||e.chest, waist:+p.waist||e.waist, hips:+p.hips||e.hips};
+}
+const bdVal = (p, k, w=S.me) => bdVals(p, w)[k];
+function bdCurve(pts, closed){                                      // плавная кривая через точки (Catmull-Rom)
+  const P = closed ? [pts[pts.length-1], ...pts, pts[0], pts[1]] : [pts[0], ...pts, pts[pts.length-1]];
   let d = `M${pts[0][0].toFixed(1)} ${pts[0][1].toFixed(1)}`;
-  for(let i=0;i<pts.length-1;i++){ const p0=pts[i-1]||pts[i], p1=pts[i], p2=pts[i+1], p3=pts[i+2]||p2;
+  for(let i=1;i<P.length-2;i++){ const p0=P[i-1], p1=P[i], p2=P[i+1], p3=P[i+2];
     d += ` C${(p1[0]+(p2[0]-p0[0])/6).toFixed(1)} ${(p1[1]+(p2[1]-p0[1])/6).toFixed(1)} ${(p2[0]-(p3[0]-p1[0])/6).toFixed(1)} ${(p2[1]-(p3[1]-p1[1])/6).toFixed(1)} ${p2[0].toFixed(1)} ${p2[1].toFixed(1)}`; }
-  return d;
+  return d + (closed ? ' Z' : '');
+}
+/* голова: выбранный аватар без кружка-фона и плеч */
+function bdHead(who){
+  const a = S.people[who]?.avatar; if(!a || typeof avatarSVG!=='function') return '';
+  return avatarSVG(a, who, 100, false).replace(/^[\s\S]*?<svg[^>]*>/, '').replace(/<\/svg>\s*$/, '')
+    .replace(/<defs>[\s\S]*?<\/defs>/, '').replace(/<circle cx="50" cy="50" r="48"[^>]*\/>/, '')
+    .replace(/<g class="av-top">[\s\S]*?<\/g>/, '').replace(/<path d="M18 104[^>]*\/>/, '').replace(/<rect x="44" y="60"[^>]*\/>/, '').replace(/clip-path="[^"]*"/, '');
 }
 function bdFigure(p, w){
-  const h=bdVal(p,'h'), ch=bdVal(p,'chest'), wa=bdVal(p,'waist'), hi=bdVal(p,'hips'), kg=bdVal(p,'w');
-  const H = 232*h/210, top = 246-H, k = H/h, cx = 70;               // k: пикселей на сантиметр
-  const f = Math.sqrt((kg/((h/100)**2))/22);                         // полнота рук и ног относительно ИМТ 22
-  const y = t => top + H*t, X = cm => cm*k;
-  const sh = X(ch*.215), c = X(ch*.165), wv = X(wa*.17), hv = X(hi*.18);
-  const thigh = hv*.52, knee = X(5.2*f), calf = X(5.6*f), ank = X(3.2);
-  const R = [[X(5.5),y(.125)],[sh*.8,y(.165)],[sh,y(.2)],[c*1.02,y(.26)],[c,y(.31)],[wv,y(.4)],[hv,y(.5)],[hv*.96,y(.56)],
-    [hv*.5+thigh*.95*.5+X(2),y(.66)],[X(3)+knee*2,y(.74)],[X(3)+calf*1.9,y(.82)],[X(3)+ank*1.6,y(.95)],[X(3)+ank*2.4,y(.985)],[X(1.5),y(.985)],[X(2.2),y(.95)],[X(1.6),y(.74)],[0,y(.535)]];
+  const V = bdVals(p, w), fem_ = w==='4';
+  const H = 236*V.h/212, k = H/V.h, cx = 70, X = cm => cm*k;       // k: пикселей на сантиметр
+  const top = 248-H, y = t => top + H*t;
+  const r = (V.w/((V.h/100)**2))/22, f = Math.sqrt(r);              // полнота рук, ног и шеи
+  const half = (c, m) => X(c*m);
+  const sh = half(V.chest, fem_?.2:.225)*Math.max(1, r**.25), c = half(V.chest, .165), wv = half(V.waist, .17), hv = half(V.hips, .178);
+  const legIn = X(1.2), thigh = Math.max(hv*.55, X(8*f)), knee = X(5*f), calf = X(5.6*f), ank = X(3.1*f**.5);
+  const neck = X(5.6*f**.6);
+  const R = [[neck,y(.125)],[neck*1.15,y(.15)],[sh*.82,y(.172)],[sh,y(.2)],[c*1.03,y(.255)],[c*(fem_?1.02:1),y(.3)],[wv,y(.395)],
+    [(wv+hv)/2*1.02,y(.455)],[hv,y(.51)],[hv*.97,y(.56)],[legIn+thigh*1.75,y(.64)],[legIn+knee*2.05,y(.73)],[legIn+calf*1.95,y(.81)],
+    [legIn+ank*1.9,y(.94)],[legIn+ank*2.6,y(.99)],[legIn*.9,y(.99)],[legIn+ank*.5,y(.94)],[legIn+X(.6),y(.81)],[legIn+X(.4),y(.73)],[legIn,y(.6)],[0,y(.535)]];
   const pts = [...R.map(([x,yy])=>[cx+x,yy]), ...R.slice(0,-1).reverse().map(([x,yy])=>[cx-x,yy])];
-  const armW = X(4.6*f), arm = d => bdCurve([[cx+d*(sh-armW*.35),y(.2)],[cx+d*(sh+armW*.55),y(.32)],[cx+d*(Math.max(hv,c)+armW*.8),y(.43)],[cx+d*(hv+armW*1.1),y(.52)]]);
-  const col = colorOf(w);
-  return `<svg viewBox="0 0 140 250" class="bd-fig" aria-label="Силуэт">
-    <line x1="8" y1="${top}" x2="8" y2="246" stroke="var(--line)" stroke-dasharray="2 3"/><text x="11" y="${top+7}" class="bd-figt">${h} см</text>
-    <ellipse cx="${cx}" cy="${y(.068)}" rx="${X(8.2)}" ry="${X(10.8)}" fill="${col}"/>
-    <path d="${arm(-1)}" stroke="${col}" stroke-width="${armW*2}" fill="none" stroke-linecap="round" opacity=".9"/>
-    <path d="${arm(1)}" stroke="${col}" stroke-width="${armW*2}" fill="none" stroke-linecap="round" opacity=".9"/>
-    <path d="${bdCurve(pts)} Z" fill="${col}"/>
+  const armW = X(4.4*f**1.1);
+  const arm = d => bdCurve([[cx+d*(sh-armW*.45),y(.195)],[cx+d*(sh+armW*.35),y(.29)],[cx+d*(Math.max(wv,c*.9)+armW*1.15),y(.39)],[cx+d*(hv+armW*1.05),y(.47)],[cx+d*(hv+armW*.95),y(.5)]]);
+  const a = S.people[w]?.avatar || {skin:0}, skin = SKIN[a.skin]||SKIN[0], shirt = colorOf(w);
+  const O = typeof outfitOf==='function' ? outfitOf(a, w) : {}, tp = O.top || {color:shirt, kind:'tee'}, bt = O.bottom || {color:'#3B3430', kind:'shorts'};
+  const topC = tp.color, botC = bt.color, longSl = ['knit','cable','hoodie','long','shirt','jacket','cardigan'].includes(tp.kind);
+  const topEnd = ['teeo','knit','cable','hoodie','jacket','cardigan'].includes(tp.kind) ? .53 : fem_ ? .47 : .5, botEnd = bt.kind==='shorts' ? .64 : .955;
+  const headR = X(V.h/16), hs = headR/22, hcy = y(.125) - headR*1.15;
+  const body = bdCurve(pts, true), id = 'bdc'+w;
+  return `<svg viewBox="0 ${Math.min(0, hcy-headR*1.6)} 140 ${250-Math.min(0, hcy-headR*1.6)}" class="bd-fig" aria-label="Силуэт">
+    <defs><clipPath id="${id}"><path d="${body}"/></clipPath></defs>
+    <line x1="8" y1="${hcy-headR*1.45}" x2="8" y2="248" stroke="var(--line)" stroke-dasharray="2 3"/><text x="11" y="${hcy-headR*1.45+7}" class="bd-figt">${V.h} см</text>
+    <path d="${arm(-1)}" stroke="${skin}" stroke-width="${armW*2}" fill="none" stroke-linecap="round"/>
+    <path d="${arm(1)}" stroke="${skin}" stroke-width="${armW*2}" fill="none" stroke-linecap="round"/>
+    <path d="${body}" fill="${skin}"/>
+    <g clip-path="url(#${id})"><rect x="0" y="${y(.16)}" width="140" height="${y(topEnd)-y(.16)}" fill="${topC}"/>
+      ${bt.kind==='skirt' ? '' : `<rect x="0" y="${y(topEnd)}" width="140" height="${y(botEnd)-y(topEnd)}" fill="${botC}"/>`}</g>
+    ${bt.kind==='skirt' ? `<path d="M${cx-wv*1.02} ${y(topEnd)} L${cx+wv*1.02} ${y(topEnd)} L${cx+hv*1.35} ${y(.76)} L${cx-hv*1.35} ${y(.76)}Z" fill="${botC}"/>` : ''}
+    <path d="${bdCurve([[cx+d1(sh,armW,-1),y(.195)],[cx-sh-armW*(longSl?1.15:.2),y(longSl?.46:.25)]])}" stroke="${topC}" stroke-width="${armW*2.1}" stroke-linecap="round" fill="none"/>
+    <path d="${bdCurve([[cx+d1(sh,armW,1),y(.195)],[cx+sh+armW*(longSl?1.15:.2),y(longSl?.46:.25)]])}" stroke="${topC}" stroke-width="${armW*2.1}" stroke-linecap="round" fill="none"/>
+    <g transform="translate(${cx-50*hs} ${hcy-46*hs}) scale(${hs})">${bdHead(w)}</g>
   </svg>`;
 }
+const d1 = (sh, armW, d) => d*(sh-armW*.45);
 function bdStats(p){
   const h = +p.h, kg = +p.w, wa = +p.waist, hi = +p.hips;
   const out = [];
@@ -163,14 +216,15 @@ function bdSpark(log){
   return `<div class="bd-spark"><svg viewBox="0 0 200 42" preserveAspectRatio="none"><polyline points="${pts}" fill="none" stroke="var(--c7)" stroke-width="2" vector-effect="non-scaling-stroke"/></svg>
     <small>${L.length} ${plural(L.length,'замер','замера','замеров')} с ${new Date(L[0].d).toLocaleDateString('ru-RU',{day:'numeric',month:'short'})}: ${d>0?'+':''}${String(Math.round(d*10)/10).replace('.',',')} кг</small></div>`;
 }
+const bdSlLabel = (p, w, k) => p[k] ? String(p[k]).replace('.',',') : '≈ '+bdVal(p,k,w);
 function bdBodyView(){
   const who = UI.bdwho || S.me, p = S.bodyp[who], me = who===S.me;
   return `<div class="filters"><div class="seg">${['7','4'].map(w=>`<button data-bdwho="${w}" class="${who===w?'on':''}">${esc(pname(w))}</button>`).join('')}</div></div>
   <div class="bd-me">
     <div class="bd-figbox" id="bd-fig">${bdFigure(p, who)}</div>
     <div class="bd-params">
-      ${BD_P.map(([k,n,u,mn,mx])=>`<div class="bd-sl"><label>${n}<b id="bdv-${k}">${p[k]||'—'}</b> ${u}</label>
-        <input type="range" min="${mn}" max="${mx}" step="${k==='w'?.5:1}" value="${bdVal(p,k)}" data-bdp="${k}" ${me?'':'disabled'}></div>`).join('')}
+      ${BD_P.map(([k,n,u,mn,mx])=>`<div class="bd-sl"><label>${n}<b id="bdv-${k}">${bdSlLabel(p,who,k)}</b> ${u}</label>
+        <input type="range" min="${mn}" max="${mx}" step="${k==='w'?.5:1}" value="${bdVal(p,k,who)}" data-bdp="${k}" ${me?'':'disabled'}></div>`).join('')}
       <div class="bd-stats" id="bd-stats">${bdStatsHtml(p)}</div>
       ${me?`<button class="btn ghost" id="bd-logw">Записать вес сегодня</button>`:`<p class="fhint">Это параметры: ${esc(pname(who))}. Менять их может только ${fem(who)?'она':'он'}.</p>`}
       ${bdSpark(p.log||[])}
@@ -182,8 +236,9 @@ const bdStatsHtml = p => bdStats(p).map(([n,v,t])=>`<div class="stat"><small>${n
 
 /* ---------- модалки ---------- */
 function bdEditModal(m){
-  const d = m.draft, tags = BD_TAGS[d.cat]||[];
+  const d = m.draft, tags = BD_TAGS[d.cat]||[], ro = !m.isNew && d.by && d.by!==S.me;
   return `<div class="scrim" data-close><div class="sheet" role="dialog"><h2>${m.isNew?'Новое видео':'Видео'}</h2>
+    ${ro?`<p class="fhint" style="margin-top:-6px">Видео добавил${fem(d.by)?'а':''} ${esc(pname(d.by))}, менять его может только ${fem(d.by)?'она':'он'}. Свою сложность и отметку «сделал» ставьте на карточке.</p>`:''}
     <div class="field"><label>Ссылка на YouTube</label><div class="fquick"><input class="inp" id="bv-url" value="${esc(d.url)}" placeholder="https://youtu.be/…" inputmode="url"><button class="btn ghost" id="bv-fetch">${m.loading?'…':'Подтянуть'}</button></div></div>
     ${d.yt?`<div class="bv-prev"><img src="${bdThumb(d.yt)}" alt=""><div><b>${esc(d.title||'')}</b><small>${d.dur?'Длительность '+bdDur(d.dur):m.loading?'Узнаю длительность…':'Длительность не определилась, впишите минуты ниже'}</small></div></div>`:''}
     <div class="field"><label>Название</label><input class="inp" id="bv-title" value="${esc(d.title)}" placeholder="Йога для спины, 20 минут"></div>
@@ -194,20 +249,36 @@ function bdEditModal(m){
     <div class="field"><label>Коротко о видео</label><textarea class="inp" id="bv-rev" rows="2" placeholder="Мягкая, хороша утром; много планки">${esc(d.review)}</textarea></div>
     <label class="fhint" style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="bv-fav" ${d.fav?'checked':''}> Любимое, показывать первым</label>
     ${!m.isNew&&(d.done['7'].length||d.done['4'].length)?`<p class="fhint">Сделано: ${['7','4'].map(w=>`${esc(pname(w))} ${d.done[w].length}`).join(', ')}. Последний раз ${new Date([...d.done['7'],...d.done['4']].sort().pop()).toLocaleDateString('ru-RU',{day:'numeric',month:'long'})}.</p>`:''}
-    <div class="actions">${m.isNew?'':'<button class="del" id="bv-del">Удалить</button>'}<button class="btn ghost" data-close>Отмена</button><button class="btn" id="bv-save">Сохранить</button></div>
+    <div class="actions">${ro?'<button class="btn" data-close>Закрыть</button>':`${m.isNew?'':'<button class="del" id="bv-del">Удалить</button>'}<button class="btn ghost" data-close>Отмена</button><button class="btn" id="bv-save">Сохранить</button>`}</div>
+  </div></div>`;
+}
+function bdPlayModal(m){
+  const v = S.bvideos.find(x=>x.id===m.id); if(!v) return '';
+  const today = v.done[S.me].includes(localISO());
+  return `<div class="scrim" data-close><div class="sheet wide bd-player" role="dialog">
+    <div class="bd-frame"><iframe src="https://www.youtube-nocookie.com/embed/${esc(v.yt)}?autoplay=1&rel=0&playsinline=1&start=${bdStart(v.url)}" title="${esc(v.title)}" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe></div>
+    <div class="bd-ph"><div><b>${esc(v.title)}</b><small>${BD_CAT[v.cat][1]}${v.dur?' · '+bdMin(v.dur)+' мин':''}${v.tags.length?' · '+v.tags.map(esc).join(', '):''}</small></div>
+      <a class="btn ghost" href="${esc(bdYtLink(v))}" target="_blank" rel="noopener" style="text-decoration:none">В YouTube ↗</a>
+      <button class="btn ${today?'ghost':''}" data-bddone="${v.id}">${today?'✓ Сегодня':'Сделал'+(fem(S.me)?'а':'')}</button></div>
   </div></div>`;
 }
 function bdRndModal(m){
   const v = m.id && S.bvideos.find(x=>x.id===m.id);
   return `<div class="scrim" data-close><div class="sheet bk-pick"><small>Сколько есть времени?</small>
     <div class="pick" style="justify-content:center;margin:12px 0">${[[10,'до 10 мин'],[20,'до 20'],[40,'до 40'],[0,'неважно']].map(([k,t])=>`<button data-bdrmin="${k}" class="${m.min===k?'on':''}">${t}</button>`).join('')}</div>
-    ${v?`<a class="bd-thumb" ${v.yt?`href="https://www.youtube.com/watch?v=${esc(v.yt)}" target="_blank" rel="noopener"`:''} style="max-width:320px;margin:0 auto">${v.yt?`<img src="${bdThumb(v.yt)}" alt="">`:`<div class="bd-noimg">${BD_CAT[v.cat][2]}</div>`}${v.dur?`<span class="bd-dur">${bdDur(v.dur)}</span>`:''}</a>
+    ${v?`<a class="bd-thumb" ${v.yt?`data-bdplay="${v.id}" href="${esc(bdYtLink(v))}"`:''} style="max-width:320px;margin:0 auto">${v.yt?`<img src="${bdThumb(v.yt)}" alt="">`:`<div class="bd-noimg">${BD_CAT[v.cat][2]}</div>`}${v.dur?`<span class="bd-dur">${bdDur(v.dur)}</span>`:''}</a>
       <h2 style="margin-top:10px">${esc(v.title)}</h2><p class="fhint">${BD_CAT[v.cat][1]}${v.tags.length?' · '+v.tags.map(esc).join(', '):''}</p>`
       : m.min!==undefined ? '<p class="fhint">Под это время ничего нет. Попробуйте подольше.</p>' : ''}
-    <div class="actions">${v?`<button class="btn ghost" data-bdrmin="${m.min}">Другое</button>${v.yt?`<a class="btn" href="https://www.youtube.com/watch?v=${esc(v.yt)}" target="_blank" rel="noopener" style="text-decoration:none">Открыть ▶</a>`:''}`:'<button class="btn ghost" data-close>Закрыть</button>'}</div></div></div>`;
+    <div class="actions">${v?`<button class="btn ghost" data-bdrmin="${m.min}">Другое</button>${v.yt?`<button class="btn" data-bdplay="${v.id}">Смотреть ▶</button>`:''}`:'<button class="btn ghost" data-close>Закрыть</button>'}</div></div></div>`;
 }
 
 /* ---------- обработчики ---------- */
+/* в плеере не перерисовываем всё окно, чтобы видео не перезапускалось */
+function bdKeep(){
+  if(UI.modal?.type!=='bdplay'){ render(); return; }
+  const fr = $root.querySelector('.bd-frame'); fr && fr.remove();
+  render(); const nf = $root.querySelector('.bd-frame'); if(fr && nf) nf.replaceWith(fr);
+}
 function bindBody(){
   const q = s=>$root.querySelector(s), all = (s,fn)=>$root.querySelectorAll(s).forEach(fn);
   const find = id => S.bvideos.find(v=>v.id===id);
@@ -218,10 +289,14 @@ function bindBody(){
   all('[data-bdedit]', el=>el.onclick=()=>{ UI.modal={type:'bvideo', draft:JSON.parse(JSON.stringify(find(el.dataset.bdedit)))}; render(); });
   all('[data-bddiff]', b=>b.onclick=()=>{ const [id,n]=b.dataset.bddiff.split(':'), v=find(id); v.diff[S.me] = +v.diff[S.me]===+n ? 0 : +n; save(); render(); });
   all('[data-bddone]', b=>b.onclick=()=>{ const v=find(b.dataset.bddone), t=localISO(), a=v.done[S.me];
-    if(a.includes(t)){ a.splice(a.lastIndexOf(t),1); save(); render(); toast('Отметка снята'); return; }
-    a.push(t); save(); render();
+    if(a.includes(t)){ a.splice(a.lastIndexOf(t),1); save(); bdKeep(); toast('Отметка снята'); return; }
+    a.push(t); save(); bdKeep();
     const s=bdWeek(S.me), g=+S.bodycfg.week[S.me]||0;
     toast(g && s.n===g ? `Цель недели выполнена: ${s.n} из ${g} 💪` : `Засчитано. ${v.title} — ${a.length}-й раз`); });
+  all('[data-bdplay]', a=>a.onclick=e=>{ e.preventDefault();
+    // YouTube не играет встроенно, если приложение открыто файлом с диска (нет адреса сайта, ошибка 153): тогда открываем сам YouTube
+    if(location.protocol==='file:'){ window.open(bdYtLink(find(a.dataset.bdplay)), '_blank', 'noopener'); return; }
+    UI.modal={type:'bdplay', id:a.dataset.bdplay}; render(); });
   all('[data-bdrnd]', b=>b.onclick=()=>{ UI.modal={type:'bdrnd'}; render(); });
   all('[data-bdrmin]', b=>b.onclick=()=>{ const min=+b.dataset.bdrmin, cur=UI.modal?.id;
     const pool = S.bvideos.filter(v=>(UI.bdcat==='all'||v.cat===UI.bdcat) && (!min || (v.dur && v.dur<=min*60)));
@@ -230,7 +305,7 @@ function bindBody(){
 
   /* ползунки: живой силуэт без полной перерисовки */
   all('[data-bdp]', r=>{
-    r.oninput=()=>{ const p=S.bodyp[S.me]; p[r.dataset.bdp]=r.value; q('#bdv-'+r.dataset.bdp).textContent=r.value; q('#bd-fig').innerHTML=bdFigure(p,S.me); q('#bd-stats').innerHTML=bdStatsHtml(p); };
+    r.oninput=()=>{ const p=S.bodyp[S.me]; p[r.dataset.bdp]=r.value; BD_P.forEach(([k])=>{ q('#bdv-'+k).textContent=bdSlLabel(p,S.me,k); if(!p[k]) q(`[data-bdp="${k}"]`).value=bdVal(p,k,S.me); }); q('#bd-fig').innerHTML=bdFigure(p,S.me); q('#bd-stats').innerHTML=bdStatsHtml(p); };
     r.onchange=()=>save();
   });
   q('#bd-logw') && (q('#bd-logw').onclick=()=>{ const p=S.bodyp[S.me]; if(!+p.w){ toast('Сначала укажите вес ползунком'); return; }
@@ -238,6 +313,7 @@ function bindBody(){
 
   const m = UI.modal; if(!m || m.type!=='bvideo') return;
   const d = m.draft;
+  if(!m.isNew && d.by && d.by!==S.me){ all('.sheet input,.sheet textarea,.sheet .pick button,.sheet .bd-diff button,#bv-fetch', e=>e.disabled=true); return; }
   const read = () => { d.url=q('#bv-url').value.trim(); d.title=q('#bv-title').value; d.review=q('#bv-rev').value; d.fav=q('#bv-fav').checked;
     const mn=+q('#bv-min').value; if(mn && mn!==bdMin(d.dur)) d.dur=mn*60; };
   const fetchMeta = async () => { read(); const id=bdYtId(d.url); if(!id){ toast('Не похоже на ссылку YouTube'); return; }
@@ -277,8 +353,8 @@ function bindBodySettings(){
   if(!SET_PAGES.some(s=>s[0]==='body')){ const i = SET_PAGES.findIndex(s=>s[0]==='books'); SET_PAGES.splice(i<0?SET_PAGES.length:i, 0, ['body','Тело']); }
   const _soon = soonView, _modal = modalView, _bind = bind, _render = render, _sp = settingsPage, _bs = bindSettings;
   soonView = k => k==='body' ? bodyView() : _soon(k);
-  modalView = () => { const t = UI.modal?.type; return t==='bvideo' ? bdEditModal(UI.modal) : t==='bdrnd' ? bdRndModal(UI.modal) : _modal(); };
-  bind = () => { _bind(); if(UI.section==='body' || ['bvideo','bdrnd'].includes(UI.modal?.type)) bindBody(); };
+  modalView = () => { const t = UI.modal?.type; return t==='bvideo' ? bdEditModal(UI.modal) : t==='bdplay' ? bdPlayModal(UI.modal) : t==='bdrnd' ? bdRndModal(UI.modal) : _modal(); };
+  bind = () => { _bind(); if(UI.section==='body' || ['bvideo','bdrnd','bdplay'].includes(UI.modal?.type)) bindBody(); };
   settingsPage = p => p==='body' ? bdSettings() : _sp(p);
   bindSettings = () => { _bs(); if(UI.modal?.type==='settings' && UI.modal.page==='body') bindBodySettings(); };
   render = () => { _render(); $root.querySelector('.nav [data-sec="body"] small')?.remove(); };
@@ -313,6 +389,9 @@ document.head.insertAdjacentHTML('beforeend', `<style>
 .bd-diff button:not([disabled]):hover{outline:1.5px solid var(--soft)}
 .bd-diff.big button{width:24px;height:24px;border-radius:7px}.bd-diff.big{gap:5px;height:44px}.bd-diff.big small{color:var(--muted);font-size:12px;margin-left:6px}
 .bd-cnt{display:flex;gap:6px;font-size:12px;color:var(--muted);margin-left:auto}.bd-cnt span{display:flex;align-items:center;gap:2px}.bd-cnt .badge{width:18px;height:18px;font-size:9px;border-width:1px}
+.bd-ext{color:var(--muted);text-decoration:none}.bd-ext:hover{color:var(--text)}
+.bd-player{padding:0;overflow:hidden}.bd-frame{aspect-ratio:16/9;background:#000}.bd-frame iframe{width:100%;height:100%;border:0;display:block}
+.bd-ph{display:flex;gap:10px;align-items:center;padding:14px 16px;flex-wrap:wrap}.bd-ph>div{flex:1;min-width:180px}.bd-ph b{display:block}.bd-ph small{color:var(--muted);font-size:12px}
 .bv-prev{display:flex;gap:10px;align-items:center;margin:-4px 0 14px;background:var(--bg);border-radius:12px;padding:8px}
 .bv-prev img{width:120px;border-radius:8px}.bv-prev small{display:block;color:var(--muted);font-size:12px;margin-top:2px}
 .bd-me{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,3fr);gap:20px;background:var(--card);border-radius:var(--r);box-shadow:var(--shadow);padding:18px;align-items:start}
