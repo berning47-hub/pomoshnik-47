@@ -1,0 +1,22 @@
+const vm=require('node:vm'),fs=require('node:fs'),assert=require('node:assert/strict');
+const place={id:'cafe',cat:'coffee',name:'Coffee',by:'4',note:'Shared note',rate:{'4':9}};
+let saves=0;
+const context={S:{me:'7',places:[place]},UI:{},ARR:{},plFind:id=>id===place.id?place:null,pname:w=>w,esc:s=>String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;'),render(){},save(){saves++;},toast(){},modalView(){},bind(){},plModal:()=>'<div class="actions">',document:{head:{insertAdjacentHTML(){}}}};
+vm.createContext(context);vm.runInContext(fs.readFileSync('place-ratings.js','utf8'),context);
+const run=s=>vm.runInContext(s,context);
+assert.ok(context.ARR.placereview);
+context.prOpen('cafe');const m=context.UI.modal;m.draft.scores={black:8,milk:10,interior:7,service:11,value:-1};m.draft.note='<script>my review</script>';
+assert.equal(context.prSave(m),true);assert.equal(saves,1);assert.equal(context.S.placeReviews.length,1);
+const review=context.S.placeReviews[0];assert.equal(review.by,'7');assert.equal(review.scores.black,8);assert.equal(review.scores.service,undefined);assert.equal(review.scores.value,undefined);
+assert.equal(place.note,'Shared note');assert.equal(place.rate['4'],9,'legacy data preserved');
+assert.match(context.prModal(m),/&lt;script>/);assert.equal(context.prAverage(place,review),'8,3');
+const partner={id:'partner',placeId:'cafe',by:'4',scores:{black:3},note:'Partner note'};context.S.placeReviews.push(partner);
+context.prOpen('cafe');context.UI.modal.draft.note='Changed own note';context.prSave(context.UI.modal);assert.equal(context.S.placeReviews.length,2);assert.equal(partner.note,'Partner note');
+context.S.me='4';assert.equal(context.prSave(context.UI.modal),false,'stale form cannot save as different person');
+context.S.me='7';context.prOpen('cafe');context.UI.modal.view='4';const read=context.prModal(context.UI.modal);assert.ok(!read.includes('data-pr-star='));assert.ok(!read.includes('id="pr-save"'));assert.match(read,/Partner note/);
+context.prOpen('cafe');place.cat='park';assert.equal(context.prSave(context.UI.modal),false,'type change cannot silently save incompatible criteria');
+assert.ok(run("prCriteria('park')").some(([key])=>key==='nature'));assert.ok(!run("prCriteria('park')").some(([key])=>key==='black'));
+assert.ok(run("prCriteria('unknown')").length);assert.ok(!context.prAverage(place,{scores:{black:8}}),'wrong category excluded from average');
+context.prOpen('cafe');context.UI.modal.draft.scores={nature:5};assert.equal(context.prSave(context.UI.modal),true);assert.equal(context.S.placeReviews[0].scores.black,8,'switching category preserves previous scores');
+console.log('PASS: independent review sync, own updates, partner/stale-form protection, category change, legacy preservation, score validation, averages and escaped notes');
+

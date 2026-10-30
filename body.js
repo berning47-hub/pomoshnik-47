@@ -97,10 +97,10 @@ function bdStreak(w){
 /* ---------- экран ---------- */
 function bodyView(){
   ensureBody(); setTimeout(bdFillMeta, 300);
-  const tabs = [['list','Тренировки'],['me','Тело']];
+  const tabs = [['list','Тренировки'],['me','Тело'],['activity','Активность']];
   return `<div class="filters"><div class="seg">${tabs.map(([k,t])=>`<button data-bdtab="${k}" class="${UI.bdtab===k?'on':''}">${t}</button>`).join('')}</div>
     <div class="sp" style="flex:1"></div>${UI.bdtab==='list'?'<button class="btn" data-bdnew>+ Видео</button>':''}</div>
-    ${UI.bdtab==='list' ? bdList() : bdBodyView()}`;
+    ${UI.bdtab==='list' ? bdList() : UI.bdtab==='activity' && typeof waActivityView==='function' ? waActivityView() : bdBodyView()}`;
 }
 function bdWeekStrip(){
   const today = localISO(), names=['пн','вт','ср','чт','пт','сб','вс'];

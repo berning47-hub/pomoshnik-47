@@ -250,6 +250,72 @@ select.inp{appearance:auto}
   .card{cursor:default}
 }
 @media (min-width:821px){.fab{display:none}}
+/* Удобство на телефоне: крупные цели, безопасные отступы и листы форм. */
+button:focus-visible,a:focus-visible{outline:2px solid var(--c7);outline-offset:3px}
+.dialog-close{position:absolute;right:12px;top:12px;width:44px;height:44px;border-radius:12px;background:var(--bg);font-size:22px;z-index:2}
+.sheet{position:relative}.sheet>h2:first-of-type{padding-right:44px}
+body:has(.scrim){overflow:hidden}
+.section-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.section-grid button{display:flex;align-items:center;gap:12px;min-height:64px;padding:14px;border:1px solid var(--line);border-radius:14px;text-align:left;background:var(--bg)}
+.section-grid button.on{border-color:var(--c7);background:var(--c7soft)}
+.section-grid .ico{font-size:22px}.section-grid small{display:block;color:var(--muted);font-size:12px;font-weight:400}
+@media (max-width:820px){
+  .main{padding-bottom:calc(158px + env(safe-area-inset-bottom))}
+  .top{gap:6px}.top>div:first-child{min-width:0;flex:1}.top .sp{display:none}
+  .top h1{font-size:20px;overflow-wrap:anywhere}.top .date{font-size:13px}
+  .iconbtn{width:44px;height:44px;flex-shrink:0}
+  .bottomnav{padding:6px 8px calc(6px + env(safe-area-inset-bottom));gap:4px}
+  .bottomnav button{min-height:52px;font-size:11px;border-radius:12px;justify-content:center}
+  .bottomnav button.on{background:var(--c7soft)}.bottomnav .ico{font-size:21px;line-height:1.2}
+  .fab{bottom:calc(84px + env(safe-area-inset-bottom))}
+  .toast{bottom:calc(150px + env(safe-area-inset-bottom));width:max-content}
+  .filters>.seg{display:flex;width:100%;min-width:0}.filters>.seg button{flex:1;min-width:0;padding:8px 4px;overflow-wrap:anywhere}
+  .seg button,.pick button,.fbtn,.addinline,.btn,.setnav button,.jchips button,.jh button,.linkbtn{min-height:44px}
+  .card .check{width:44px;height:44px;font-size:16px;border-radius:12px}
+  .dualcheck{gap:6px}.dualcheck .check{font-size:13px}
+  .card .row{align-items:center}.card .title{min-height:44px;display:flex;align-items:center}
+  .card .title:focus-visible{outline:2px solid var(--c7)}
+  .scrim{align-items:flex-end;padding:calc(12px + env(safe-area-inset-top)) 0 0}
+  .sheet{border-radius:22px 22px 0 0;max-height:calc(100dvh - 12px - env(safe-area-inset-top));padding:20px 16px calc(16px + env(safe-area-inset-bottom));overscroll-behavior:contain;scroll-padding:72px 0 100px}
+  .sheet .actions{position:sticky;bottom:calc(-16px - env(safe-area-inset-bottom));background:var(--card);padding:12px 0 calc(12px + env(safe-area-inset-bottom));margin-bottom:calc(-16px - env(safe-area-inset-bottom));z-index:1;flex-wrap:wrap;border-top:1px solid var(--line)}
+  .inp,select.cur{font-size:16px;min-height:44px;min-width:0}
+  .field>div,.subs .s input[type=text],.fquick .inp{min-width:0}
+  .subs .s button{min-width:44px;min-height:44px}
+  .sets{min-height:0;gap:14px}.setbody{max-height:none;overflow:visible;padding-right:0}
+  .setnav{flex-wrap:wrap;overflow:visible;gap:4px}.setnav button{font-size:13px;padding:8px 10px}
+  .switchrow:has(>.seg){flex-direction:column;align-items:stretch;gap:8px}
+  .switchrow>.seg{display:flex;width:100%;min-width:0}
+  .switchrow>.seg button{flex:1;min-width:0;padding:8px 6px;white-space:normal;overflow-wrap:anywhere}
+  .fquick{flex-wrap:wrap}.fquick .inp{flex-basis:160px}
+  .frow{gap:8px}.fname{overflow-wrap:anywhere}
+}
+@media (max-width:360px){
+  .main{padding-left:12px;padding-right:12px}.top{gap:4px}.top h1{font-size:18px}
+  .fstats{grid-template-columns:1fr}.stat{padding:12px}.stat b{font-size:22px}
+  .sheet .actions .btn{padding-left:12px;padding-right:12px}
+}
+/* Общий ритм мобильных экранов, включая iPhone 13 Pro и 16 Pro. */
+@media(max-width:820px){
+  .main .top{margin-bottom:16px}.main .filters{gap:8px;margin-bottom:14px}
+  .main .filters>.seg{max-width:100%}.main .filters>.sp{display:none}
+  .main .filters>.seg.bk-tabs{flex:1 1 100%;width:100%}
+  .main .filters>.seg.bk-tabs button{padding:8px 6px;font-size:14px;white-space:normal;overflow-wrap:normal}
+  .main .filters.bd-cats>.seg{flex-wrap:wrap;gap:4px;overflow:visible}
+  .main .filters.bd-cats>.seg button{flex:0 1 auto;padding:8px 10px;white-space:nowrap;overflow-wrap:normal}
+  .main .fquick .inp{flex-basis:100%;width:100%}.main .fquick>.btn{flex:1}
+
+  .main .fstore,.main .stat,.main .suggest{padding:14px}
+  .main .btn,.main .fbtn,.main .pl-m,.main .linkbtn{min-height:44px}
+  .main .pl-m{width:44px;flex-shrink:0}
+  .pl-mapcol .pl-map{height:42svh;min-height:260px;max-height:420px}
+  .pl-mapcol>.fhint{margin:10px 0 16px;line-height:1.5}
+  .pl-cb .pl-wact{display:flex;flex-wrap:wrap;gap:8px}
+  .pl-cb .pl-wact .fbtn{flex:1;white-space:normal;text-align:center;min-width:110px}
+  .sheet .field label{line-height:1.5}.sheet .inp{line-height:1.45}
+  .sheet .actions .btn{min-height:44px}.sheet{scroll-padding-bottom:140px}
+  .pr-card .fbtn{min-height:44px}.pr-label{gap:6px}
+}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;transition:none!important}}
 </style>
 </head>
 <body>
@@ -270,6 +336,17 @@ const SOON = {
   study:['Учёба','Уроки английского и другие курсы как задачи с прогрессом для каждого.'],
   books:['Книги','Что читаем на Boox, прогресс и «хочу прочитать».']
 };
+const MOBILE_PRIMARY = ['tasks','places','food','money'];
+function mobileNav(){
+  const extra = !MOBILE_PRIMARY.includes(UI.section);
+  return `<nav class="bottomnav" aria-label="Основные разделы">${MOBILE_PRIMARY.map(key=>{
+    const [k,i,n] = SECTIONS.find(s=>s[0]===key);
+    return `<button data-sec="${k}" class="${UI.section===k?'on':''}" ${UI.section===k?'aria-current="page"':''}><span class="ico" aria-hidden="true">${i}</span>${n}</button>`;
+  }).join('')}<button data-act="sections" class="${extra?'on':''}" aria-haspopup="dialog"><span class="ico" aria-hidden="true">···</span>${extra?esc(SECTIONS.find(s=>s[0]===UI.section)?.[2]||'Ещё'):'Ещё'}</button></nav>`;
+}
+function sectionsModal(){
+  return `<div class="scrim" data-close><div class="sheet"><h2>Все разделы</h2><div class="section-grid">${SECTIONS.map(([k,i,n])=>`<button data-sec="${k}" class="${UI.section===k?'on':''}"><span class="ico" aria-hidden="true">${i}</span><span>${n}${['meals','study'].includes(k)?'<small>Скоро</small>':''}</span></button>`).join('')}</div></div></div>`;
+}
 
 /* ---------- avatars ---------- */
 const SKIN = ['#F6D7BD','#E9B98F','#C98E62','#8D5A3B'];
@@ -436,7 +513,7 @@ function render(){
       ${UI.section==='tasks' ? tasksView() : UI.section==='food' ? foodView() : UI.section==='money' ? moneyView() : soonView(UI.section)}
     </main>
   </div>
-  <nav class="bottomnav">${SECTIONS.map(([k,i,n])=>`<button data-sec="${k}" class="${UI.section===k?'on':''}"><span class="ico">${i}</span>${n}</button>`).join('')}</nav>
+  ${mobileNav()}
   ${UI.section==='tasks'?'<button class="fab" data-act="add" aria-label="Добавить задачу">+</button>':''}
   ${UI.modal ? modalView() : ''}`;
   bind();
@@ -473,7 +550,7 @@ function tasksView(){
     const mins = list.reduce((a,t)=>a+(+t.minutes||0),0);
     return `<section class="col ${UI.mcol===k?'mshow':''}" data-col="${k}">
       <div class="colhead">${n} <span class="n">${list.length}</span>${k!=='done'&&mins?`<span class="mins">≈ ${fmtMin(mins)}</span>`:''}</div>
-      <div class="cards">${list.length?list.map(cardView).join(''):`<div class="empty">${k==='done'?'Здесь появятся сделанные задачи':'Пусто. Перетащите сюда задачу или добавьте новую'}</div>`}</div>
+      <div class="cards">${list.length?list.map(cardView).join(''):`<div class="empty">${k==='done'?'Здесь появятся сделанные задачи':'Пока пусто. Добавьте задачу кнопкой ниже.'}</div>`}</div>
       ${k!=='done'?`<button class="addinline" data-act="add" data-col="${k}">+ Добавить</button>`:''}
     </section>`;}).join('')}</div>`;
 }
@@ -487,7 +564,7 @@ function cardView(t){
   const waiting = t.owner==='both' && !done && (t.checks['7']!==t.checks['4']);
   const marks = t.owner==='both' ? badgeEl('4')+badgeEl('7') : badgeEl(t.owner);
   return `<article class="card o${t.owner==='both'?'b':t.owner} ${done?'done':''} ${canEdit(t)?'':'ro'}" draggable="${canEdit(t)?'true':'false'}" data-id="${t.id}">
-    <div class="row">${checkEl}<div class="title" data-open="${t.id}">${esc(t.title)}</div></div>
+    <div class="row">${checkEl}<div class="title" data-open="${t.id}" role="button" tabindex="0" aria-label="Открыть задачу: ${esc(t.title)}">${esc(t.title)}</div></div>
     <div class="meta">
       ${t.minutes?`<span class="chip">⏱ ${fmtMin(+t.minutes)}</span>`:''}
       ${t.date?`<span class="chip">📅 ${new Date(t.date).toLocaleDateString('ru-RU',{day:'numeric',month:'short'})}</span>`:''}
@@ -506,6 +583,7 @@ function soonView(k){
 /* ---------- modals ---------- */
 function modalView(){
   const m = UI.modal;
+  if(m.type==='sections') return sectionsModal();
   if(m.type==='task') return taskModal(m);
   if(m.type==='profile') return profileModal(m);
   if(m.type==='notes') return notesModal();
@@ -672,7 +750,19 @@ function readTaskForm(){
 }
 function bind(){
   const q = s=>$root.querySelector(s), all = (s,fn)=>$root.querySelectorAll(s).forEach(fn);
-  all('[data-sec]', b=>b.onclick=()=>{UI.section=b.dataset.sec; render(); window.scrollTo(0,0);});
+  all('[data-sec]', b=>b.onclick=()=>{UI.section=b.dataset.sec; UI.modal=null; render(); window.scrollTo(0,0);});
+  all('[data-act="sections"]', b=>b.onclick=()=>{UI.modal={type:'sections'}; render();});
+  const sheet = q('.sheet');
+  if(sheet){
+    sheet.setAttribute('role','dialog'); sheet.setAttribute('aria-modal','true');
+    const heading = sheet.querySelector('h2');
+    if(heading){heading.id='dialog-title'; sheet.setAttribute('aria-labelledby',heading.id);}
+    const close = document.createElement('button');
+    close.className='dialog-close'; close.dataset.close=''; close.type='button'; close.setAttribute('aria-label','Закрыть окно'); close.textContent='×';
+    sheet.prepend(close);
+    all('.app,.bottomnav,.fab', el=>el.inert=true);
+    close.focus({preventScroll:true});
+  }
   all('[data-filter]', b=>b.onclick=()=>{UI.filter=b.dataset.filter; render();});
   all('[data-mcol]', b=>b.onclick=()=>{UI.mcol=b.dataset.mcol; render();});
   all('[data-act="add"]', b=>b.onclick=()=>openTask(null, b.dataset.col || (matchMedia('(max-width:820px)').matches && UI.mcol!=='done' ? UI.mcol : S.settings.tasks.defCol)));
@@ -682,6 +772,7 @@ function bind(){
     const t=S.tasks.find(x=>x.id===b.dataset.check);
     if(t && t.owner==='both' && b.dataset.who===S.me && !t.checks[S.me] && !t.checks[other(S.me)]) askDone(t.id, null); else toggleCheck(b.dataset.check, b.dataset.who); });
   all('[data-open]', el=>el.onclick=()=>openTask(el.dataset.open));
+  all('.card [data-open]', el=>el.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openTask(el.dataset.open);}});
   // drag & drop (desktop)
   all('.card', c=>{
     c.ondragstart=e=>{e.dataTransfer.setData('text/plain',c.dataset.id); c.classList.add('dragging');};
@@ -743,6 +834,15 @@ function bind(){
   }
 }
 document.addEventListener('keydown', e=>{ if(e.key==='Escape' && UI.modal){ UI.modal=null; render(); } });
+document.addEventListener('keydown', e=>{
+  if(e.key!=='Tab' || !UI.modal) return;
+  const sheet=$root.querySelector('.sheet'); if(!sheet) return;
+  const items=Array.from(sheet.querySelectorAll('button,input,select,textarea,a[href],[tabindex="0"]')).filter(el=>!el.disabled && el.getClientRects().length);
+  if(!items.length) return;
+  const first=items[0], last=items[items.length-1];
+  if(e.shiftKey && (document.activeElement===first || !sheet.contains(document.activeElement))){e.preventDefault();last.focus();}
+  else if(!e.shiftKey && (document.activeElement===last || !sheet.contains(document.activeElement))){e.preventDefault();first.focus();}
+});
 </script>
 <script src="settings.js"></script>
 <script src="food.js"></script>
@@ -752,6 +852,8 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape' && UI.modal){ UI.m
 <script src="avatar.js"></script>
 <script src="body.js"></script>
 <script src="places.js"></script>
+<script src="walking.js"></script>
+<script src="place-ratings.js"></script>
 <script>
 render();
 if('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('sw.js').catch(()=>{});

@@ -6,6 +6,20 @@ const PL_CAT = Object.fromEntries(PL_CATS.map(c=>[c[0],c]));
 const PL_STAY = {coffee:30, food:60, park:40, view:30, culture:60, other:20};   // минут на месте по умолчанию
 const PL_TBS = [41.62, 44.65, 41.84, 44.98];                                    // рамка Тбилиси: lat/lng min, max
 const PL_CENTER = [41.7095, 44.7600];
+/* подложки: все от Esri (без ключа, работают и с диска, и с сайта) */
+const ESRI = 'https://server.arcgisonline.com/ArcGIS/rest/services/';
+const PL_BASES = [['map','Схема',ESRI+'World_Street_Map/MapServer/tile/{z}/{y}/{x}'],['sat','Спутник',ESRI+'World_Imagery/MapServer/tile/{z}/{y}/{x}'],['hybrid','Спутник + подписи',ESRI+'World_Imagery/MapServer/tile/{z}/{y}/{x}'],['topo','Рельеф',ESRI+'World_Topo_Map/MapServer/tile/{z}/{y}/{x}']];
+const plBase = () => { try{ const b=localStorage.getItem('p47.plbase'); return PL_BASES.some(x=>x[0]===b) ? b : 'map'; }catch(e){ return 'map'; } };
+const plYa = (lat, lng) => `https://yandex.com/maps/?pt=${lng},${lat}&z=17&l=map`;
+const plYaRoute = (a, b) => `https://yandex.com/maps/?rtext=${a.lat},${a.lng}~${b.lat},${b.lng}&rtt=pd`;
+function plSetBase(k){
+  try{ localStorage.setItem('p47.plbase', k); }catch(e){}
+  if(!PL.map) return;
+  const url = PL_BASES.find(b=>b[0]===k)[2];
+  PL.tiles.setUrl(url);
+  if(k==='hybrid'){if(!PL.labels)PL.labels=L.tileLayer(ESRI+'Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',{maxZoom:19});PL.labels.addTo(PL.map);}
+  else if(PL.labels)PL.map.removeLayer(PL.labels); PL.el.classList.toggle('sat', ['sat','hybrid'].includes(k));
+}
 
 /* стартовые места: настоящие известные заведения и парки Ваке и соседней Веры.
    Адреса из путеводителей (wander-lush.org, 2026), координаты примерные: при первом открытии карты
@@ -31,6 +45,7 @@ function ensurePlaces(){
   S.placecfg = Object.assign({home:null, speed:4.5, stay:{...PL_STAY}, seeded:[]}, S.placecfg||{});
   S.placecfg.stay = Object.assign({...PL_STAY}, S.placecfg.stay||{});
   if(!S.placecfg.home && typeof PRIV_HOME!=='undefined') S.placecfg.home = {...PRIV_HOME};
+  if(!S.placecfg.homeAddr && typeof PRIV_HOME_ADDR!=='undefined') S.placecfg.homeAddr = PRIV_HOME_ADDR;   // адрес только в private-data.js, в GitHub не попадает
   PL_SEED.forEach(([k,name,cat,addr,q,lat,lng,note])=>{
     if(S.placecfg.seeded.includes(k)) return; S.placecfg.seeded.push(k);
     if(!S.places.some(p=>p.id==='pl-'+k)) S.places.push({id:'pl-'+k, name, cat, addr, q, lat, lng, note, link:'', seed:true, geo:'approx', by:'both', at:Date.now(), been:{}, want:{}, rate:{}});
@@ -96,14 +111,16 @@ function plMountMap(){
     PL.el = document.createElement('div'); PL.el.className='pl-map';
     slot.replaceWith(PL.el);
     const dark = typeof effTheme==='function' && effTheme()==='dark';
-    PL.map = L.map(PL.el, {zoomControl:true, attributionControl:true}).setView(S.placecfg.home ? [S.placecfg.home.lat, S.placecfg.home.lng] : PL_CENTER, 15);
-    PL.tiles = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {maxZoom:19,
+    PL.map = L.map(PL.el, {zoomControl:true, attributionControl:true}).setView(S.placecfg.home ? [S.placecfg.home.lat, S.placecfg.home.lng] : PL_CENTER, S.placecfg.home ? 16 : 15);
+    PL.tiles = L.tileLayer(PL_BASES.find(b=>b[0]===plBase())[2], {maxZoom:19,
       attribution:'Tiles &copy; Esri, HERE, Garmin, OpenStreetMap contributors'}).addTo(PL.map);
+    PL.el.classList.toggle('sat', ['sat','hybrid'].includes(plBase()));
     PL.dark = dark; PL.el.classList.toggle('dark', dark);
     PL.layer = L.layerGroup().addTo(PL.map);
+    plSetBase(plBase());
     PL.map.on('click', e=>plMapClick(e.latlng));
     PL.el.addEventListener('click', e=>{ const b=e.target.closest('[data-plpop]'); if(!b) return; const [act,id]=b.dataset.plpop.split(':'); plPopAct(act, id); });
-    setTimeout(plGeocodeSeeds, 1500);
+    setTimeout(plAutoHome, 800); setTimeout(plGeocodeSeeds, 2500);
   } else {
     slot.replaceWith(PL.el);
     const dark = typeof effTheme==='function' && effTheme()==='dark';
@@ -133,10 +150,8 @@ function plDrawMarkers(){
   const H = S.placecfg.home;
   if(H) L.marker([H.lat,H.lng], {icon:L.divIcon({html:'<div class="pl-pin home"><i>🏠</i></div>', className:'pl-ic', iconSize:[34,34], iconAnchor:[17,30]}), title:'Дом', zIndexOffset:-100})
     .addTo(PL.layer).bindPopup(`<b>Дом</b><br><button class="pl-pbtn" data-plpop="home:">Перенести</button>`, {closeButton:false, offset:[0,-24]});
-  if(calc && calc.pts.length>1){
-    L.polyline(calc.pts.map(p=>[p.lat,p.lng]), {color:getComputedStyle(document.documentElement).getPropertyValue('--c7').trim()||'#7A4A2A', weight:4, opacity:.8, dashArray:'6 8'}).addTo(PL.layer);
-    if(UI.plfit!==walk.id){ UI.plfit=walk.id; PL.map.fitBounds(L.latLngBounds(calc.pts.map(p=>[p.lat,p.lng])).pad(.2)); }
-  }
+  if(calc && calc.pts.length>1 && typeof waDrawWalk==='function') waDrawWalk(walk,calc);
+
 }
 function plPopup(p){
   const c = PL_CAT[p.cat]||PL_CATS[5], d = S.placecfg.home ? plWalkKm(S.placecfg.home, p) : 0;
@@ -145,7 +160,8 @@ function plPopup(p){
     ${p.note?`<p>${esc(p.note)}</p>`:''}
     <div class="pl-pacts"><button class="pl-pbtn ${mine?'on':''}" data-plpop="been:${p.id}">${mine?'✓ Был'+(fem(S.me)?'а':''):'Был'+(fem(S.me)?'а':'')}</button>
       <button class="pl-pbtn ${p.want[S.me]?'on':''}" data-plpop="want:${p.id}">${p.want[S.me]?'★ Хочу':'☆ Хочу'}</button>
-      <button class="pl-pbtn" data-plpop="edit:${p.id}">Подробнее</button></div></div>`;
+      <button class="pl-pbtn" data-plpop="edit:${p.id}">Подробнее</button></div>
+      <a class="pl-ya" href="${plYa(p.lat,p.lng)}" target="_blank" rel="noopener">Открыть в Яндекс Картах ↗</a></div>`;
 }
 function plPopAct(act, id){
   if(act==='home'){ PL.pick={home:true}; PL.map.closePopup(); PL.el.classList.add('picking'); toast('Нажмите на карте, где ваш дом'); return; }
@@ -181,6 +197,21 @@ plPopAct = (act, id) => {
   _plPop(act, id);
 };
 
+/* базовый адрес: ищем на карте и ставим дом; сработает один раз, если адрес известен, а точки ещё нет */
+async function plSetHome(q, quiet){
+  const r = await plGeocode(q);
+  if(!r.length){ if(!quiet) toast('Адрес не нашёлся. Нажмите на карте, где дом'); return false; }
+  S.placecfg.home = {lat:r[0].lat, lng:r[0].lng}; S.placecfg.homeAddr = q; save();
+  if(PL.map) PL.map.setView([r[0].lat, r[0].lng], 16);
+  if(UI.section==='places' && !UI.modal) render();
+  if(!quiet) toast('Дом поставлен: '+r[0].label); return true;
+}
+let plHomeTried = false;
+function plAutoHome(){
+  if(plHomeTried || S.placecfg.home || !S.placecfg.homeAddr || !navigator.onLine) return;
+  plHomeTried = true; plSetHome(S.placecfg.homeAddr+', Tbilisi', true);
+}
+
 /* уточняем примерные координаты стартовых мест по адресу (OpenStreetMap, не чаще раза в секунду) */
 let plGeoBusy = false; const plGeoTried = new Set();
 async function plGeocodeSeeds(){
@@ -209,10 +240,11 @@ function placesView(){
   const coffee = S.places.filter(p=>p.cat==='coffee'), cBoth = coffee.filter(p=>p.been['7']&&p.been['4']).length;
   return `<div class="filters"><div class="seg">${tabs.map(([k,t])=>`<button data-pltab="${k}" class="${UI.pltab===k?'on':''}">${t}</button>`).join('')}</div>
     <span class="pl-stat">☕ ${cBoth} из ${coffee.length} кофеен вдвоём</span>
+    <div class="seg pl-bases">${PL_BASES.map(([k,n])=>`<button data-plbase="${k}" class="${plBase()===k?'on':''}">${n}</button>`).join('')}</div>
     <div class="sp" style="flex:1"></div>
     ${UI.pltab==='list'?`<button class="btn ghost" data-plrnd>☕ Куда сегодня?</button><button class="btn" data-plnew>+ Место</button>`:`<button class="btn" data-plwnew>+ Прогулка</button>`}</div>
     <div class="pl-wrap">
-      <div class="pl-mapcol"><div id="pl-slot" class="pl-map"></div>
+      <div class="pl-mapcol"><div id="pl-slot" class="pl-map"></div>${typeof waRouteStatus==='function'?waRouteStatus():''}
         ${S.placecfg.home?'':'<p class="fhint">Нажмите на карте у вашего дома и выберите «🏠 Тут наш дом»: так 47 посчитает расстояния и время прогулок.</p>'}</div>
       <div class="pl-side">${UI.pltab==='list' ? plList() : plWalks()}</div>
     </div>`;
@@ -232,7 +264,7 @@ function plCard(p){
     <div class="pl-ci">${c[2]}</div>
     <div class="pl-cb"><b>${esc(p.name)}</b>
       <small>${p.addr?esc(p.addr):c[1]}${d?` · ${plKmStr(d)}`:''}${p.seed?' · <span class="pl-chk" title="Стартовое место: адрес из путеводителя, проверьте, что оно ещё работает">проверить</span>':''}</small>
-      ${p.note?`<p>${esc(p.note)}</p>`:''}</div>
+      ${p.note?`<p>${esc(p.note)}</p>`:''}${typeof prCard==='function'?prCard(p):''}</div>
     <div class="pl-marks">${['7','4'].map(w=>{ const b=p.been[w], wa=p.want[w], me=w===S.me;
       return `<button class="pl-m ${b?'been':wa?'want':''}" ${me?`data-plmark="${p.id}"`:'disabled'} title="${esc(pname(w))}: ${b?'был'+(fem(w)?'а':'')+' '+new Date(b).toLocaleDateString('ru-RU',{day:'numeric',month:'short'}):wa?'хочет':'ещё не был'+(fem(w)?'а':'')}" style="${b?`background:${colorOf(w)};color:#fff`:''}">${b?'✓':wa?'★':w}</button>`; }).join('')}</div>
   </article>`;
@@ -243,7 +275,7 @@ function plWalks(){
     return `<article class="pl-card pl-walk ${UI.plwalk===w.id?'sel':''}" data-plwsel="${w.id}">
       <div class="pl-ci">🚶</div>
       <div class="pl-cb"><b>${esc(w.title)}</b>
-        <small>${c.stops.length} ${plural(c.stops.length,'точка','точки','точек')} · ${plKmStr(c.km)} · ~${fmtMin(c.total)}${w.home&&H?' · от дома':''}</small>
+        <small>${c.stops.length} ${plural(c.stops.length,'точка','точки','точек')} · ${plKmStr(c.km)} · ~${fmtMin(c.total)}${w.home&&H?' · от дома':''}${c.road?' · по улицам':' · предварительно'}</small>
         <p>${c.stops.map(p=>esc(p.name)).join(' → ')||'Нет точек'}</p>
         <div class="pl-wact">${t?`<span class="chip">${t.col==='done'?'✓ прошли':'на доске'}</span>`:`<button class="fbtn" data-pltask="${w.id}">На доску</button>`}
           <button class="fbtn" data-plwedit="${w.id}">${w.by===S.me||w.by==='both'?'Изменить':'Открыть'}</button></div></div>
@@ -272,7 +304,7 @@ function plModal(m){
       <p class="fhint" style="margin:6px 0 0">${has?`Точка: ${(+d.lat).toFixed(4)}, ${(+d.lng).toFixed(4)}${S.placecfg.home?` · ${plKmStr(plWalkKm(S.placecfg.home,d))} от дома`:''}. `:''}<button class="pl-lnk" id="pl-pick">${has?'Поправить на карте':'Поставить на карте'}</button></p></div>
     <div class="field"><label>Заметка</label><textarea class="inp" id="pl-note" rows="2" placeholder="Флэт уайт отличный, столики на улице">${esc(d.note)}</textarea></div>
     <div class="field"><label>Ссылка (Instagram, Google Maps, Wolt)</label><input class="inp" id="pl-link" value="${esc(d.link)}" placeholder="https://" inputmode="url"></div>
-    <div class="pl-mlinks">${d.link?`<a href="${esc(d.link)}" target="_blank" rel="noopener">Ссылка ↗</a>`:''}${has?`<a href="${gm}" target="_blank" rel="noopener">Маршрут пешком ↗</a>`:''}
+    <div class="pl-mlinks">${d.link?`<a href="${esc(d.link)}" target="_blank" rel="noopener">Ссылка ↗</a>`:''}${has?`<a href="${plYa(d.lat,d.lng)}" target="_blank" rel="noopener">Яндекс Карты ↗</a><a href="${gm}" target="_blank" rel="noopener">Google: маршрут пешком ↗</a>${S.placecfg.home?`<a href="${plYaRoute(S.placecfg.home,d)}" target="_blank" rel="noopener">Яндекс: маршрут от дома ↗</a>`:''}`:''}
       ${!m.isNew?['7','4'].map(w=>d.been[w]?`<span>${badgeEl(w)} был${fem(w)?'а':''} ${new Date(d.been[w]).toLocaleDateString('ru-RU',{day:'numeric',month:'long'})}</span>`:'').join(''):''}</div>
     <div class="actions">${ro?'<button class="btn" data-close>Закрыть</button>':`${m.isNew?'':'<button class="del" id="pl-del">Удалить</button>'}<button class="btn ghost" data-close>Отмена</button><button class="btn" id="pl-save">Сохранить</button>`}</div>
   </div></div>`;
@@ -311,11 +343,12 @@ function plToTask(w){
 /* ---------- обработчики ---------- */
 function bindPlaces(){
   const q = s=>$root.querySelector(s), all = (s,fn)=>$root.querySelectorAll(s).forEach(fn);
+  all('[data-plbase]', b=>b.onclick=()=>{ plSetBase(b.dataset.plbase); all('[data-plbase]', x=>x.classList.toggle('on', x===b)); });
   all('[data-pltab]', b=>b.onclick=()=>{ UI.pltab=b.dataset.pltab; UI.plfit=null; render(); });
   all('[data-plcat]', b=>b.onclick=()=>{ UI.plcat=b.dataset.plcat; render(); });
   all('[data-plst]', b=>b.onclick=()=>{ UI.plst=b.dataset.plst; render(); });
   all('[data-plnew]', b=>b.onclick=()=>plNew());
-  all('[data-plcard]', el=>el.onclick=e=>{ if(e.target.closest('[data-plmark]')) return; const p=plFind(el.dataset.plcard);
+  all('[data-plcard]', el=>el.onclick=e=>{ if(e.target.closest('[data-plmark],[data-pr-open]')) return; const p=plFind(el.dataset.plcard);
     if(UI.plsel===p.id) plOpen(p.id); else plFly(p); });
   all('[data-plmark]', b=>b.onclick=()=>{ const p=plFind(b.dataset.plmark);
     // по кругу: ничего → хочу → был → ничего
@@ -389,12 +422,16 @@ function plSettings(){
     <div class="pl-stays">${PL_CATS.map(([k,n,i])=>`<label>${i} ${n}<input class="inp" type="number" min="0" step="5" data-spst="${k}" value="${c.stay[k]}"></label>`).join('')}</div>
     <p class="fhint">В каждой прогулке время на точке можно поменять отдельно.</p>
     <h3>Дом</h3>
-    ${c.home?`<p class="fhint">Дом отмечен на карте. Перенести: нажмите на 🏠 на карте.</p><button class="btn ghost" id="sp-home-del">Убрать дом с карты</button>`:'<p class="fhint">Не отмечен. Нажмите на карте у дома и выберите «🏠 Тут наш дом».</p>'}`;
+    <div class="field"><label>Базовый адрес</label><div class="fquick"><input class="inp" id="sp-home-addr" value="${esc(c.homeAddr||'')}" placeholder="74b Giorgi Shatberashvili St"><button class="btn ghost" id="sp-home-find">Найти</button></div></div>
+    <p class="fhint">${c.home?'Дом стоит на карте. Можно сменить адрес выше или нажать на 🏠 на карте и перенести его.':'Адрес пока не найден. Впишите его, или нажмите на карте у дома и выберите «🏠 Тут наш дом».'}</p>
+    ${c.home?`<button class="btn ghost" id="sp-home-del">Убрать дом с карты</button>`:''}`;
 }
 function bindPlaceSettings(){
   const q = s=>$root.querySelector(s);
   $root.querySelectorAll('[data-spsp]').forEach(b=>b.onclick=()=>{ S.placecfg.speed=+b.dataset.spsp; save(); render(); });
   $root.querySelectorAll('[data-spst]').forEach(i=>i.onchange=()=>{ S.placecfg.stay[i.dataset.spst]=Math.max(0,+i.value||0); save(); });
+  q('#sp-home-find') && (q('#sp-home-find').onclick=async ()=>{ const v=q('#sp-home-addr').value.trim(); if(!v) return;
+    const b=q('#sp-home-find'); b.textContent='…'; const ok = await plSetHome(/tbilisi|тбилиси/i.test(v)?v:v+', Tbilisi'); if(!ok){ b.textContent='Найти'; return; } UI.modal.page='places'; render(); });
   q('#sp-home-del') && (q('#sp-home-del').onclick=()=>{ S.placecfg.home=null; save(); render(); });
 }
 
@@ -412,11 +449,12 @@ function bindPlaceSettings(){
 })();
 
 document.head.insertAdjacentHTML('beforeend', `<style>
+.pl-bases button{padding:5px 10px;font-size:13px}.pl-ya{display:block;margin-top:8px;font-size:12px;color:var(--c7)}
 .pl-stat{font-size:13px;color:var(--muted);padding:0 4px}
 .pl-wrap{display:grid;grid-template-columns:minmax(0,1fr) 380px;gap:16px;align-items:start}
 .pl-mapcol{position:sticky;top:12px}
 .pl-map{height:calc(100vh - 190px);min-height:380px;border-radius:var(--r);box-shadow:var(--shadow);background:var(--bg2);overflow:hidden;z-index:0}
-.pl-map.dark .leaflet-tile-pane{filter:invert(1) hue-rotate(180deg) brightness(.9) contrast(.9)}
+.pl-map.dark:not(.sat) .leaflet-tile-pane{filter:invert(1) hue-rotate(180deg) brightness(.9) contrast(.9)}
 .pl-map.picking{cursor:crosshair;outline:3px solid var(--c7);outline-offset:-3px}
 .pl-map.picking .leaflet-grab{cursor:crosshair}
 .pl-side{min-width:0}

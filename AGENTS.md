@@ -22,14 +22,16 @@
 | `books.js` + `books/` | «Книги»: полка, прогресс, цели; постеры `*.jpg` и превью `*-s.jpg` |
 | `avatar.js` | Расширенный редактор персонажа и гардероб (переопределяет `avatarSVG` и редактор) |
 | `body.js` | «Тело»: видео йоги/тренировок (YouTube), параметры тела, силуэт |
-| `places.js` | «Места»: карта (Leaflet 1.9.4 с cdnjs, тайлы CARTO/OSM, поиск Nominatim), прогулки → задачи |
+| `places.js` | «Места»: карта (Leaflet 1.9.4 с cdnjs, слои Esri: схема/спутник/рельеф, поиск Nominatim), прогулки → задачи |
+| `place-ratings.js` | Личные отзывы по типу места, 1–10 звёзд и примечание; отдельные ARR.placereview по авторам |
+| `walking.js` | Прогулки → личная активность в «Тело», пешие маршруты BRouter/OSM и высоты без ключа; описание в `WALKING.md`, проверки — `tests/walking.test.cjs` |
 | `sw.js` | Service worker: офлайн-кэш, стратегия «сначала сеть» |
 | `manifest.json`, `icons/` | PWA-манифест и иконки |
 | `supabase-setup.sql` | Таблица `public.records` + RLS. Выполняется вручную в Supabase SQL Editor |
 | `private-data.js` | **ЛИЧНЫЕ ДАННЫЕ, НЕ КОММИТИТЬ** (в `.gitignore`). Имена, стартовые задачи, история Wolt, заказы. Есть только на ПК Кирилла |
 
 Порядок скриптов в `index.html` важен:
-`private-data.js` (может отсутствовать) → ядро → `settings.js` → `food.js` → `money.js` → `sync.js` → `books.js` → `avatar.js` → `body.js` → `places.js`.
+`private-data.js` (может отсутствовать) → ядро → `settings.js` → `food.js` → `money.js` → `sync.js` → `books.js` → `avatar.js` → `body.js` → `places.js` → `walking.js` → `place-ratings.js`.
 
 ## Как устроен код
 - Одно глобальное состояние `S`. После любого изменения данных: `save()` (пишет в localStorage и ставит синхронизацию), затем `render()`.
