@@ -10,8 +10,13 @@ SYNC.on = !!(SYNC.url && SYNC.key);
 const SYNC_EMAIL = w => `u${w}@pomoshnik47.app`;
 
 /* ---------- сессия ---------- */
-const syncSession = () => { try{ return JSON.parse(localStorage.getItem(SYNC.authKey)); }catch(e){ return null; } };
-const syncSetSession = s => { try{ s ? localStorage.setItem(SYNC.authKey, JSON.stringify(s)) : localStorage.removeItem(SYNC.authKey); }catch(e){} };
+// «запомнить устройство»: сессия в localStorage (остаётся надолго), иначе в sessionStorage (до закрытия вкладки)
+const syncSession = () => { try{ return JSON.parse(sessionStorage.getItem(SYNC.authKey) || localStorage.getItem(SYNC.authKey)); }catch(e){ return null; } };
+const syncSetSession = (s, remember=true) => { try{
+  localStorage.removeItem(SYNC.authKey); sessionStorage.removeItem(SYNC.authKey);
+  if(s) (remember ? localStorage : sessionStorage).setItem(SYNC.authKey, JSON.stringify(s));
+}catch(e){} };
+const syncRemembered = () => { try{ return !sessionStorage.getItem(SYNC.authKey); }catch(e){ return true; } };
 function syncHasSession(){ const s = syncSession(); return !!(s && s.refresh_token); }
 async function authFetch(path, body){
   const r = await fetch(SYNC.url + path, {method:'POST', headers:{'Content-Type':'application/json', apikey:SYNC.key}, body:JSON.stringify(body)});
@@ -19,11 +24,18 @@ async function authFetch(path, body){
   if(!r.ok) throw Object.assign(new Error(j.error_description || j.msg || j.message || 'auth'), {status:r.status});
   return j;
 }
-const keepSession = (j, who) => syncSetSession({access_token:j.access_token, refresh_token:j.refresh_token, expires_at:Date.now()+(j.expires_in||3600)*1000, who});
-async function syncSignIn(who, password){
+const keepSession = (j, who, remember=syncRemembered()) => syncSetSession({access_token:j.access_token, refresh_token:j.refresh_token, expires_at:Date.now()+(j.expires_in||3600)*1000, who}, remember);
+async function syncSignIn(who, password, remember=true){
   const j = await authFetch('/auth/v1/token?grant_type=password', {email:SYNC_EMAIL(who), password});
-  keepSession(j, who);
+  keepSession(j, who, remember);
 }
+/* после 3 неверных паролей подряд вход на этом устройстве закрывается на 10 минут */
+const LOCK_KEY = 'p47.lock', LOCK_TRIES = 3, LOCK_MIN = 10;
+const lockInfo = () => { try{ return JSON.parse(localStorage.getItem(LOCK_KEY)) || {n:0, until:0}; }catch(e){ return {n:0, until:0}; } };
+const lockSave = l => { try{ localStorage.setItem(LOCK_KEY, JSON.stringify(l)); }catch(e){} };
+const lockLeftMin = () => Math.max(0, Math.ceil((lockInfo().until - Date.now())/60000));
+function lockFail(){ const l = lockInfo(); l.n++; if(l.n>=LOCK_TRIES){ l.n = 0; l.until = Date.now() + LOCK_MIN*60000; } lockSave(l); return l.until>Date.now() ? 0 : LOCK_TRIES - l.n; }
+const lockClear = () => lockSave({n:0, until:0});
 function syncSignOut(){ syncSetSession(null); setSyncState('off'); }
 async function syncToken(){
   let s = syncSession(); if(!s) throw Object.assign(new Error('no session'), {status:401});

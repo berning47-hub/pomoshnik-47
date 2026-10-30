@@ -590,9 +590,12 @@ function setupView(){
     return `<div class="scrim" style="background:var(--bg)"><div class="sheet" style="max-width:380px">
       <div style="display:flex;justify-content:center;margin:0 0 10px">${avatarSVG(first?SET.av[w]:S.people[w].avatar,w,84)}</div>
       <h2 style="text-align:center">Вход: ${esc(nm)}</h2>
-      <div class="field"><label>Пароль</label><input class="inp" id="s-pw" type="password" autocomplete="current-password" autofocus></div>
+      <form id="s-form" autocomplete="on" onsubmit="return false">
+      <input type="email" name="username" autocomplete="username" value="${SYNC_EMAIL(w)}" readonly tabindex="-1" aria-hidden="true" style="position:absolute;opacity:0;height:0;width:0;border:0;padding:0;pointer-events:none">
+      <div class="field"><label>Пароль</label><input class="inp" id="s-pw" name="password" type="password" autocomplete="current-password" autofocus></div>
+      <label class="fhint" style="display:flex;gap:8px;align-items:center;margin:0 0 6px"><input type="checkbox" id="s-rem" checked> Запомнить это устройство</label>
       <p class="fhint" id="s-err" style="color:var(--bad);min-height:18px;margin:0"></p>
-      <div class="actions"><button class="btn ghost" id="s-back">Назад</button><button class="btn ${w==='4'?'blue':''}" id="s-go">Войти</button></div></div></div>`;
+      <div class="actions"><button type="button" class="btn ghost" id="s-back">Назад</button><button type="submit" class="btn ${w==='4'?'blue':''}" id="s-go">Войти</button></div></form></div></div>`;
   }
   const w = SET.who, a = SET.av[w];
   return `<div class="scrim" style="background:var(--bg)"><div class="sheet">
@@ -616,19 +619,23 @@ function bindSetup(){
     q('#s-back').onclick=()=>{ SET.step=0; render(); };
     const go = async () => {
       const pw = q('#s-pw').value; if(!pw){ q('#s-pw').focus(); return; }
+      if(lockLeftMin()){ err(`Слишком много попыток. Подождите ${lockLeftMin()} мин. или попросите сбросить пароль через ПК`); return; }
       q('#s-go').disabled = true; err('');
       try{
-        await syncSignIn(w, pw);
+        await syncSignIn(w, pw, q('#s-rem').checked); lockClear();
         if(S.setupDone){ S.me=w; saveLocal(); SET.step=0; render(); toast(`Вы вошли: ${pname(w)}`); syncCycle(); return; }
         await syncCycle();                           // новое устройство: сначала забираем данные из базы
         if(S.setupDone){ S.me=w; SET.step=0; saveLocal(); render(); toast(`Вы вошли: ${pname(w)}`); }
         else { SET.who=w; SET.step=1; render(); }   // база пуста: создаём персонажа
       }catch(e){
         q('#s-go').disabled = false;
-        err(e.status===400||e.status===401 ? 'Неверный пароль или аккаунт ещё не создан' : 'Нет связи с сервером, попробуйте ещё раз');
+        if(e.status===400||e.status===401){
+          const left = lockFail();
+          err(left ? `Неверный пароль или аккаунт ещё не создан. Осталось попыток: ${left}` : `Неверный пароль. Вход закрыт на ${LOCK_MIN} мин. Если забыли пароль, его можно сбросить через ПК`);
+        } else err('Нет связи с сервером, попробуйте ещё раз');
       }
     };
-    q('#s-go').onclick=go; q('#s-pw').onkeydown=e=>{ if(e.key==='Enter') go(); };
+    q('#s-form').onsubmit=e=>{ e.preventDefault(); go(); return false; };
     return;
   }
   if(SET.step!==1) return;
@@ -741,6 +748,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape' && UI.modal){ UI.m
 <script src="food.js"></script>
 <script src="money.js"></script>
 <script src="sync.js"></script>
+<script src="books.js"></script>
 <script>
 render();
 if('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('sw.js').catch(()=>{});
