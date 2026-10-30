@@ -111,7 +111,7 @@ function moneyView(){
       <div class="jh"><button data-mjs="date" class="${J.by==='date'?'on':''}">Дата${arrow('date')}</button><button data-mjs="sum" class="${J.by==='sum'?'on':''}">Сумма${arrow('sum')}</button></div>
       ${rows.length?rows.map(r=>`<div class="frow jrow ${r.wolt?'link':''}" ${r.wolt?`data-mord="${esc(r.id)}"`:''}>
         <span class="mdot" style="background:${MCAT[r.cat][2]}"></span>
-        <div class="fname" style="cursor:inherit">${esc(r.note||MCAT[r.cat][1])}<small>${new Date(r.date).toLocaleDateString('ru-RU',{day:'numeric',month:'short'})} · ${esc(MCAT[r.cat][1])} · ${SRC[r.src]||''}${r.auto&&r.wolt.items?' · состав':''}</small></div>
+        <div class="fname" style="cursor:inherit">${esc(r.note||MCAT[r.cat][1])}<small>${new Date(r.date).toLocaleDateString('ru-RU',{day:'numeric',month:'short'})} · ${esc(MCAT[r.cat][1])} · ${SRC[r.src]||''}${r.auto&&r.wolt.items?' · состав':''}${!r.auto&&r.who?' · '+esc(pname(r.who)):''}</small></div>
         <span class="fprice" style="color:var(--text);font-weight:600;text-align:right">−${money(r.sum)}${r.cur&&r.cur!==curDef()?`<small style="display:block;font-weight:400;color:var(--muted)">${moneyIn(+r.v,r.cur)}</small>`:''}</span>
         ${r.auto?'<span style="width:24px;color:var(--soft)">›</span>':`<button class="iconbtn jdel" data-mdel="${r.id}" title="Удалить">✕</button>`}</div>`).join(''):'<div class="empty">Пусто</div>'}
     </section>

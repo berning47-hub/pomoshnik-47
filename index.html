@@ -409,7 +409,7 @@ const fmtMin = m => !m ? '' : m<60 ? `${m} мин` : `${Math.floor(m/60)} ч${m%
 const $root = document.getElementById('root');
 function render(){
   applyLook();
-  if(!S.setupDone){ $root.innerHTML = setupView(); bindSetup(); return; }
+  if(!S.setupDone || !S.me){ $root.innerHTML = setupView(); bindSetup(); return; }
   const unread = S.notes.filter(n=>!n.read && (n.scope===S.me || n.scope==='shared')).length;
   const sec = SECTIONS.find(s=>s[0]===UI.section);
   $root.innerHTML = `
@@ -519,6 +519,7 @@ function taskModal(m){
   const owners = [[S.me,badgeEl(S.me)+' '+esc(pname(S.me))],['both',`<span class="marks" style="margin:0">${badgeEl('4')+badgeEl('7')}</span> Вместе`]];
   return `<div class="scrim" data-close><div class="sheet" role="dialog">
     <h2>${m.isNew?'Новая задача':'Задача'}</h2>
+    ${!m.isNew&&t.by?`<p class="fhint" style="margin-top:-6px">Создал${fem(t.by)?'а':''}: ${esc(pname(t.by))}${t.editedBy&&t.editedBy!==t.by?`, изменил${fem(t.editedBy)?'а':''}: ${esc(pname(t.editedBy))}`:''}</p>`:''}
     ${ro?`<p class="fhint" style="margin-top:-6px">Это задача: ${esc(pname(t.owner))}. Вы можете её только смотреть.</p>`:''}
     <div class="field"><label>Что сделать</label><input class="inp" id="f-title" value="${esc(t.title)}" placeholder="Например: купить кофе в зёрнах"></div>
     <div class="field"><label>Чья</label><div class="pick" id="f-owner">${owners.map(([k,h])=>`<button data-v="${k}" class="${t.owner===k?'on':''}">${h}</button>`).join('')}</div>
@@ -546,7 +547,7 @@ function profileModal(m){
     <div style="display:flex;justify-content:center;margin:6px 0 12px">${avatarSVG(a,w,110)}</div>
     <div class="field"><label>Имя</label><input class="inp" id="p-name" value="${esc(m.name)}" placeholder="Имя"></div>
     ${avatarEditor(a,w)}
-    <div class="actions"><button class="btn ghost" data-close>Закрыть</button><button class="btn" id="p-save">Сохранить</button></div>
+    <div class="actions"><button class="del" id="p-logout">Выйти</button><button class="btn ghost" data-close>Закрыть</button><button class="btn" id="p-save">Сохранить</button></div>
   </div></div>`;
 }
 function avatarEditor(a,w){
@@ -567,36 +568,42 @@ function notesModal(){
 }
 
 /* ---------- setup (first run) ---------- */
-let SET = { step:0, who:'7', av:{'7':{...PRESETS['7'][0]},'4':{...PRESETS['4'][0]}}, name:{'7':NAMES['7'],'4':NAMES['4']} };
+let SET = { step:0, who:null, av:{'7':{...PRESETS['7'][0]},'4':{...PRESETS['4'][0]}}, name:{'7':NAMES['7'],'4':NAMES['4']} };
 function setupView(){
-  const w = SET.step===0 ? null : SET.step===1 ? '7' : '4';
-  if(SET.step===0) return `<div class="scrim" style="background:var(--bg)"><div class="sheet" style="text-align:center">
-    <div style="display:flex;justify-content:center;margin:8px 0 12px">${logo().replace(/30px/g,'')}</div>
-    <h2 style="font-size:24px">Помощник 47</h2>
-    <p style="color:var(--muted)">Задачи, прогулки, продукты и бюджет для двоих. 7 коричневая, 4 тёмно-синяя. Сначала соберите своих персонажей.</p>
-    <div class="actions" style="justify-content:center"><button class="btn" id="s-next">Начать</button></div></div></div>`;
-  const a = SET.av[w];
+  const first = !S.setupDone;
+  if(SET.step===0){
+    const btn = w => { const nm = first ? SET.name[w] : pname(w), av = first ? SET.av[w] : S.people[w].avatar;
+      return `<button data-login="${w}">${avatarSVG(av,w,72)}<b>Войти как ${esc(nm||('«'+w+'»'))}</b></button>`; };
+    return `<div class="scrim" style="background:var(--bg)"><div class="sheet" style="text-align:center;max-width:440px">
+      <div style="display:flex;justify-content:center;margin:8px 0 12px">${logo()}</div>
+      <h2 style="font-size:24px">Помощник 47</h2>
+      <p style="color:var(--muted)">${first?'Задачи, прогулки, продукты и бюджет для двоих. Выберите, кто вы. Персонажа можно настроить сразу после входа.':'Выберите, кто вы.'}</p>
+      <div class="who-pick">${btn('7')}${btn('4')}</div></div></div>`;
+  }
+  const w = SET.who, a = SET.av[w];
   return `<div class="scrim" style="background:var(--bg)"><div class="sheet">
-    <h2>Персонаж ${w}</h2>
+    <h2>Ваш персонаж: ${w}</h2>
     <div style="display:flex;justify-content:center;margin:0 0 12px">${avatarSVG(a,w,110)}</div>
     <div class="field"><label>Имя</label><input class="inp" id="s-name" value="${esc(SET.name[w])}" placeholder="Имя"></div>
     ${avatarEditor(a,w)}
-    ${SET.step===2?`<div class="field"><label>Кто пользуется этим устройством</label><div class="pick">${['7','4'].map(x=>`<button data-setme="${x}" class="${SET.who===x?'on':''}">${badgeEl(x)} ${esc(SET.name[x]||x)}</button>`).join('')}</div></div>`:''}
-    <div class="actions"><button class="btn ghost" id="s-back">Назад</button><button class="btn ${w==='4'?'blue':''}" id="s-next">${SET.step===2?'Готово':'Дальше'}</button></div>
+    <div class="actions"><button class="btn ghost" id="s-back">Назад</button><button class="btn ${w==='4'?'blue':''}" id="s-next">Войти</button></div>
   </div></div>`;
 }
 function bindSetup(){
-  const w = SET.step===1?'7':'4';
   const q = s => $root.querySelector(s);
+  $root.querySelectorAll('[data-login]').forEach(b=>b.onclick=()=>{
+    const w = b.dataset.login;
+    if(S.setupDone){ S.me=w; save(); render(); toast(`Вы вошли: ${pname(w)}`); }
+    else { SET.who=w; SET.step=1; render(); }
+  });
+  if(SET.step!==1) return;
+  const w = SET.who;
   q('#s-name')?.addEventListener('input', e=>SET.name[w]=e.target.value);
-  bindAvatarEditor(()=>SET.av[w], w, ()=>{ render(); });
-  $root.querySelectorAll('[data-setme]').forEach(b=>b.onclick=()=>{SET.who=b.dataset.setme; render();});
-  q('#s-back') && (q('#s-back').onclick=()=>{SET.step--; render();});
+  bindAvatarEditor(()=>SET.av[w], w, ()=>render());
+  q('#s-back').onclick=()=>{ SET.step=0; render(); };
   q('#s-next').onclick=()=>{
-    if(SET.step<2){ SET.step++; render(); return; }
-    S.people['7']={name:SET.name['7'].trim(),avatar:SET.av['7']};
-    S.people['4']={name:SET.name['4'].trim(),avatar:SET.av['4']};
-    S.me=SET.who; S.setupDone=true; save(); render(); toast('Добро пожаловать в 47');
+    S.people[w]={name:SET.name[w].trim(),avatar:SET.av[w]};
+    S.me=w; S.setupDone=true; SET.step=0; save(); render(); toast('Добро пожаловать в 47');
   };
 }
 function bindAvatarEditor(getA, w, after){
@@ -676,6 +683,7 @@ function bind(){
       d.title=d.title.trim(); d.sub=d.sub.filter(s=>s.t.trim());
       if(d.col==='done' && d.owner!=='both'){ d.checks[d.owner]=true; d.doneAt=d.doneAt||Date.now(); }
       if(d.col==='done' && d.owner==='both' && !(d.checks['7']&&d.checks['4'])){ d.checks[S.me]=true; d.col=d.prevCol&&d.prevCol!=='done'?d.prevCol:'today'; toast('Общая задача уйдёт в «Готово», когда отметитесь оба'); }
+      d.by = d.by || S.me; d.editedBy = S.me; d.editedAt = Date.now();
       const i = S.tasks.findIndex(x=>x.id===d.id);
       if(i>=0) S.tasks[i]=d; else { S.tasks.push(d); if(d.owner==='both') notify(`${pname(S.me)} добавил${S.me==='4'?'а':''} общую задачу «${d.title}»`, other(S.me)); }
       UI.modal=null; save(); render(); if(i<0) toast('Задача добавлена');
@@ -689,6 +697,7 @@ function bind(){
     all('[data-edit]', b=>b.onclick=()=>{ const w=b.dataset.edit; Object.assign(m,{who:w,av:{...S.people[w].avatar},name:S.people[w].name}); render(); });
     all('[data-me]', b=>b.onclick=()=>{ S.me=b.dataset.me; save(); Object.assign(m,{who:S.me,av:{...S.people[S.me].avatar},name:S.people[S.me].name}); render(); });
     q('#p-save').onclick=()=>{ S.people[m.who]={name:m.name.trim(),avatar:{...m.av}}; UI.modal=null; save(); render(); toast('Сохранено'); };
+    q('#p-logout').onclick=()=>{ S.me=null; UI.modal=null; save(); render(); };
   }
 }
 document.addEventListener('keydown', e=>{ if(e.key==='Escape' && UI.modal){ UI.modal=null; render(); } });
