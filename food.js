@@ -180,7 +180,7 @@ function bindFood(){
   all('[data-fout]', b=>b.onclick=()=>setFoodStatus(b.dataset.fout,'out'));
   all('[data-fback]', b=>b.onclick=()=>setFoodStatus(b.dataset.fback,'ok'));
   all('[data-fbought]', b=>b.onclick=()=>setFoodStatus(b.dataset.fbought,'ok'));
-  all('[data-fedit]', el=>el.onclick=()=>{ const it=S.food.items.find(i=>i.id===el.dataset.fedit); UI.modal={type:'fitem',draft:{...it}}; render(); });
+  all('[data-fedit]', el=>el.onclick=()=>{ const it=S.food.items.find(i=>i.id===el.dataset.fedit); if(it.by && it.by!==S.me){ toast(`Продукт добавил${it.by==='4'||it.by===4?'а':''} ${pname(it.by)}. Менять его может только автор`); return; } UI.modal={type:'fitem',draft:{...it}}; render(); });
   all('[data-fnew]', b=>b.onclick=()=>{ UI.modal={type:'fitem',isNew:true,draft:{id:uid(),name:'',store:'agro',price:'',unit:'',cat:'veg',count:0,status:'ok',qty:'',qtyFull:'',bought:'',expiry:'',warned:false}}; render(); setTimeout(()=>q('#fi-name')?.focus(),30); });
   all('[data-fstore]', b=>b.onclick=()=>{ UI.modal={type:'fstore',key:b.dataset.fstore}; render(); });
   all('[data-forder]', b=>b.onclick=()=>{ UI.modal={type:'forder',key:b.dataset.forder}; render(); setTimeout(()=>q('#or-sum')?.focus(),30); });
@@ -189,7 +189,7 @@ function bindFood(){
   if(fq){
     const go=()=>{ const v=fq.value.trim(); if(!v) return;
       let it=S.food.items.find(i=>i.name.toLowerCase()===v.toLowerCase());
-      if(!it){ it={id:uid(),name:v,store:'agro',price:'',unit:'',cat:'veg',count:0,status:'ok',qty:'',qtyFull:'',bought:'',expiry:'',warned:false}; S.food.items.push(it); }
+      if(!it){ it={by:S.me,id:uid(),name:v,store:'agro',price:'',unit:'',cat:'veg',count:0,status:'ok',qty:'',qtyFull:'',bought:'',expiry:'',warned:false}; S.food.items.push(it); }
       setFoodStatus(it.id,'out'); setTimeout(()=>$root.querySelector('#fq')?.focus(),30); };
     q('#fq-add').onclick=go; fq.onkeydown=e=>{ if(e.key==='Enter') go(); };
   }
@@ -198,7 +198,7 @@ function bindFood(){
   if(m.type==='fitem'){
     q('#fi-store').onchange=e=>{ if(e.target.value==='__new'){ const n=prompt('Название магазина'); if(n){ const k='s'+uid(); S.food.stores[k]={name:n,last:'',link:''}; m.draft.store=k; } readFi(); render(); } };
     const readFi=()=>{ const d=m.draft; d.name=q('#fi-name').value.trim(); if(q('#fi-store').value!=='__new') d.store=q('#fi-store').value; { const pr=readAmt('fi-price'); d.price = pr ? pr.gel : ''; } d.unit=q('#fi-unit').value; d.cat=q('#fi-cat').value; d.qty=q('#fi-qty').value; d.qtyFull=q('#fi-full').value; d.bought=q('#fi-bought').value; d.expiry=q('#fi-exp').value; };
-    q('#fi-save').onclick=()=>{ readFi(); const d=m.draft; if(!d.name){ q('#fi-name').focus(); return; } d.warned=false;
+    q('#fi-save').onclick=()=>{ readFi(); const d=m.draft; if(!d.name){ q('#fi-name').focus(); return; } d.warned=false; d.by=d.by||S.me;
       const i=S.food.items.findIndex(x=>x.id===d.id); if(i>=0) S.food.items[i]=d; else S.food.items.push(d);
       UI.modal=null; save(); render(); toast('Сохранено'); };
     q('#fi-del') && (q('#fi-del').onclick=()=>{ S.food.items=S.food.items.filter(x=>x.id!==m.draft.id); UI.modal=null; save(); render(); });
@@ -210,7 +210,7 @@ function bindFood(){
     let cat='food';
     all('#or-cat button', b=>b.onclick=()=>{ cat=b.dataset.v; all('#or-cat button', x=>x.classList.toggle('on', x===b)); });
     q('#or-save').onclick=()=>{ const amt=readAmt('or-sum'); if(!amt||!amt.gel){ q('#or-sum').focus(); return; } const sum=amt.gel;
-      S.food.spend.unshift({date:q('#or-date').value||todayISO(), store:q('#or-store').value.trim()||'—', sum, cat, v:amt.v, cur:amt.cur});
+      S.food.spend.unshift({date:q('#or-date').value||todayISO(), store:q('#or-store').value.trim()||'—', sum, cat, v:amt.v, cur:amt.cur, by:S.me});
       if(m.key && q('#or-mark')?.checked) S.food.items.filter(i=>i.store===m.key && i.status==='out').forEach(i=>{ i.status='ok'; i.bought=todayISO(); if(i.qtyFull) i.qty=i.qtyFull; i.count=(i.count||0)+1; i.warned=false; });
       UI.modal=null; save(); render(); toast(`Записано: ${money(sum)}`); };
   }

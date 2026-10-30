@@ -113,7 +113,7 @@ function moneyView(){
         <span class="mdot" style="background:${MCAT[r.cat][2]}"></span>
         <div class="fname" style="cursor:inherit">${esc(r.note||MCAT[r.cat][1])}<small>${new Date(r.date).toLocaleDateString('ru-RU',{day:'numeric',month:'short'})} · ${esc(MCAT[r.cat][1])} · ${SRC[r.src]||''}${r.auto&&r.wolt.items?' · состав':''}${!r.auto&&r.who?' · '+esc(pname(r.who)):''}</small></div>
         <span class="fprice" style="color:var(--text);font-weight:600;text-align:right">−${money(r.sum)}${r.cur&&r.cur!==curDef()?`<small style="display:block;font-weight:400;color:var(--muted)">${moneyIn(+r.v,r.cur)}</small>`:''}</span>
-        ${r.auto?'<span style="width:24px;color:var(--soft)">›</span>':`<button class="iconbtn jdel" data-mdel="${r.id}" title="Удалить">✕</button>`}</div>`).join(''):'<div class="empty">Пусто</div>'}
+        ${r.auto?'<span style="width:24px;color:var(--soft)">›</span>':!mine(r)?'':`<button class="iconbtn jdel" data-mdel="${r.id}" title="Удалить">✕</button>`}</div>`).join(''):'<div class="empty">Пусто</div>'}
     </section>
    </div>
   </div>`;
@@ -154,6 +154,7 @@ function savingModal(m){
     <div class="actions">${m.isNew?'':'<button class="del" id="sv-del">Удалить</button>'}<button class="btn ghost" data-close>Отмена</button><button class="btn" id="sv-save">Сохранить</button></div></div></div>`;
 }
 
+const mine = r => !r.who || r.who===S.me;
 function bindMoney(){
   const q = s=>$root.querySelector(s), all=(s,fn)=>$root.querySelectorAll(s).forEach(fn);
   ensureMoney();
@@ -166,26 +167,26 @@ function bindMoney(){
   all('[data-mjc]', b=>b.onclick=()=>{ UI.mj.cat=b.dataset.mjc; render(); });
   all('[data-mjs]', b=>b.onclick=()=>{ const by=b.dataset.mjs; if(UI.mj.by===by) UI.mj.dir*=-1; else { UI.mj.by=by; UI.mj.dir=-1; } render(); });
   all('[data-mord]', el=>el.onclick=()=>{ UI.modal={type:'order',id:el.dataset.mord}; render(); });
-  all('[data-mdel]', b=>b.onclick=e=>{ e.stopPropagation(); M.log=M.log.filter(r=>r.id!==b.dataset.mdel); save(); render(); toast('Удалено'); });
+  all('[data-mdel]', b=>b.onclick=e=>{ e.stopPropagation(); const rr=M.log.find(r=>r.id===b.dataset.mdel); if(rr && !mine(rr)){ toast(`Запись добавил${rr.who==='4'||rr.who===4?'а':''} ${pname(rr.who)}. Удалить её может только автор`); return; } M.log=M.log.filter(r=>r.id!==b.dataset.mdel); save(); render(); toast('Удалено'); });
   const add = q('#mq-add');
   if(add){ const go=()=>{ const a=readAmt('mq-sum'); if(!a||!a.gel){ q('#mq-sum').focus(); return; }
       M.log.unshift({id:uid(),date:localISO(),sum:a.gel,v:a.v,cur:a.cur,cat:q('#mq-cat').value,src:q('#mq-src').value,note:q('#mq-note').value.trim(),who:S.me}); save(); render(); toast(`Записано: ${money(a.gel)}`); };
     add.onclick=go; q('#mq-note').onkeydown=q('#mq-sum').onkeydown=e=>{ if(e.key==='Enter') go(); }; }
   q('#msv-add')?.addEventListener('click', ()=>{ UI.modal={type:'msave',isNew:true,draft:{id:uid(),name:'',v:'',cur:curDef()}}; render(); });
-  all('[data-msv]', el=>el.onclick=()=>{ const x=M.savings.find(s=>s.id===el.dataset.msv); UI.modal={type:'msave',draft:{...x}}; render(); });
+  all('[data-msv]', el=>el.onclick=()=>{ const x=M.savings.find(s=>s.id===el.dataset.msv); if(x.who && x.who!==S.me){ toast(`Это накопления: ${pname(x.who)}. Менять их может только владелец`); return; } UI.modal={type:'msave',draft:{...x}}; render(); });
   const mod = UI.modal;
   if(mod?.type==='mset'){
     const d = mod.draft;
     const read=()=>{ d.budget = readAmt('ms-budget') || {gel:'',v:'',cur:undefined}; all('[data-fn]', i=>{ const k=+i.dataset.fn, a=readAmt('ms-f'+k); d.fixed[k].name=i.value; d.fixed[k].amount=a?a.gel:''; d.fixed[k].v=a?a.v:undefined; d.fixed[k].cur=a?a.cur:undefined; }); };
     q('#ms-fadd').onclick=()=>{ read(); d.fixed.push({id:uid(),name:'',amount:''}); render(); };
     all('[data-fdel]', b=>b.onclick=()=>{ read(); d.fixed.splice(+b.dataset.fdel,1); render(); });
-    q('#ms-incadd').onclick=()=>{ const a=readAmt('ms-inc'); if(!a||!a.gel){ q('#ms-inc').focus(); return; } read(); M.incomes.push({id:uid(),date:localISO(),sum:a.gel,v:a.v,cur:a.cur}); save(); render(); toast(`Приход ${money(a.gel)} учтён`); };
+    q('#ms-incadd').onclick=()=>{ const a=readAmt('ms-inc'); if(!a||!a.gel){ q('#ms-inc').focus(); return; } read(); M.incomes.push({id:uid(),date:localISO(),sum:a.gel,v:a.v,cur:a.cur,who:S.me}); save(); render(); toast(`Приход ${money(a.gel)} учтён`); };
     q('#ms-save').onclick=()=>{ read(); const b=d.budget; M.budget=b.gel||''; M.budgetV=b.v; M.budgetCur=b.cur; M.fixed=d.fixed.filter(f=>f.name.trim()||+f.amount); M.warned={}; UI.modal=null; save(); render(); toast('Сохранено'); };
   }
   if(mod?.type==='msave'){
     const d = mod.draft;
     q('#sv-save').onclick=()=>{ const a=readAmt('sv-amt'); if(!a){ q('#sv-amt').focus(); return; }
-      const rec={id:d.id,name:q('#sv-name').value.trim()||'Накопления',v:a.v,cur:a.cur};
+      const rec={id:d.id,name:q('#sv-name').value.trim()||'Накопления',v:a.v,cur:a.cur,who:d.who||S.me};
       const i=M.savings.findIndex(x=>x.id===d.id); if(i>=0) M.savings[i]=rec; else M.savings.push(rec);
       UI.modal=null; save(); render(); toast('Сохранено'); };
     q('#sv-del')?.addEventListener('click', ()=>{ M.savings=M.savings.filter(x=>x.id!==d.id); UI.modal=null; save(); render(); });
