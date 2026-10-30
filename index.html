@@ -385,7 +385,7 @@ function toggleCheck(id, who){
 function moveTask(id, col, confirmed){
   const task = S.tasks.find(x=>x.id===id); if(!task || task.col===col) return;
   if(!canEdit(task)){ toast(`Это задача: ${pname(task.owner)}. Двигать её может только владелец`); return; }
-  if(col==='done' && task.owner==='both' && !task.checks[S.me] && !confirmed){ askDone(id, col); return; }
+  if(col==='done' && task.owner==='both' && !task.checks[S.me] && !task.checks[other(S.me)] && !confirmed){ askDone(id, col); return; }
   if(col==='done'){
     if(task.owner==='both'){ task.checks[S.me]=true; if(!(task.checks['7']&&task.checks['4'])){ toast(`Общая задача: ждём отметку ${other(S.me)}`); notify(`${pname(S.me)} отметил${S.me==='4'?'а':''} «${task.title}», ждём твою отметку`, other(S.me)); save(); render(); return; } }
     else task.checks[task.owner]=true;
@@ -396,11 +396,11 @@ function moveTask(id, col, confirmed){
 function askDone(id, col){ UI.modal = {type:'confirm', id, col}; render(); }
 function confirmView(m){
   const t = S.tasks.find(x=>x.id===m.id); if(!t) return '';
-  const w = S.me, f = fem(w);
+  const w = other(S.me), f = fem(w);   // спрашиваем про партнёра
   return `<div class="scrim" data-close><div class="sheet" style="max-width:380px"><h2>${esc(pname(w))} ${f?'согласна':'согласен'} и ${f?'сделала':'сделал'} задачу?</h2>
     <p style="color:var(--muted);margin:0">«${esc(t.title)}»</p>
-    <p class="fhint">Общая задача закроется, когда отметятся оба.</p>
-    <div class="actions"><button class="btn ghost" data-close>Ещё нет</button><button class="btn" id="cf-yes">Да, ${f?'сделала':'сделал'}</button></div></div></div>`;
+    <p class="fhint">«Да»: задача закроется для обоих. «Ещё нет»: ваша отметка встанет, и мы ждём ${esc(pname(w))}.</p>
+    <div class="actions"><button class="btn ghost" id="cf-no">Ещё нет</button><button class="btn" id="cf-yes">Да, ${f?'сделала':'сделал'}</button></div></div></div>`;
 }
 const fmtMin = m => !m ? '' : m<60 ? `${m} мин` : `${Math.floor(m/60)} ч${m%60?' '+m%60+' мин':''}`;
 
@@ -630,7 +630,7 @@ function bind(){
   all('[data-act="notes"]', b=>b.onclick=()=>{UI.modal={type:'notes'}; S.notes.forEach(n=>{if(n.scope===S.me||n.scope==='shared') n.read=true}); save(); render();});
   all('[data-check]', b=>b.onclick=e=>{ e.stopPropagation();
     const t=S.tasks.find(x=>x.id===b.dataset.check);
-    if(t && t.owner==='both' && b.dataset.who===S.me && !t.checks[S.me]) askDone(t.id, null); else toggleCheck(b.dataset.check, b.dataset.who); });
+    if(t && t.owner==='both' && b.dataset.who===S.me && !t.checks[S.me] && !t.checks[other(S.me)]) askDone(t.id, null); else toggleCheck(b.dataset.check, b.dataset.who); });
   all('[data-open]', el=>el.onclick=()=>openTask(el.dataset.open));
   // drag & drop (desktop)
   all('.card', c=>{
@@ -651,7 +651,11 @@ function bind(){
   if(UI.section!=='money' && UI.modal && ['mset','msave'].includes(UI.modal.type)) bindMoney();
   if(!UI.modal) return;
   if(UI.modal.type==='confirm'){
-    q('#cf-yes').onclick=()=>{ const m=UI.modal; UI.modal=null; if(m.col) moveTask(m.id, m.col, true); else toggleCheck(m.id, S.me); };
+    const go = both => { const m=UI.modal, t=S.tasks.find(x=>x.id===m.id); UI.modal=null;
+      if(both && t){ t.checks[other(S.me)]=true; notify(`${pname(S.me)} отметил${fem(S.me)?'а':''} «${t.title}» за вас обоих`, other(S.me)); }
+      if(m.col) moveTask(m.id, m.col, true); else toggleCheck(m.id, S.me); };
+    q('#cf-yes').onclick=()=>go(true);
+    q('#cf-no').onclick=()=>go(false);
     return;
   }
   if(UI.modal.type==='task' && !UI.modal.isNew && !canEdit(UI.modal.draft)){
